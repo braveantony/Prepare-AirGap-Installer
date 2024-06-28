@@ -297,7 +297,7 @@ prepare_rancher() {
   done
 
   rename_rancher_all_image=$(cat rancher-images.txt | sed "s|^|${Private_Registry_Name}/|" | tr '\n' ' ')
-  podman save $rename_rancher_all_image | gzip --stdout > rancher-"${Rancher_Version}"-image.tar.gz
+  podman save -m $rename_rancher_all_image | gzip --stdout > rancher-"${Rancher_Version}"-image.tar.gz
   [[ (( $(stat -c%s rancher-"${Rancher_Version}"-image.tar.gz) -lt 50000000 )) ]] && echo "Podman Save rancher ${Rancher_Version} images failed" && exit 1
 
   cd ../..; tar -czf compressed_files/rancher-airgap-"${Rancher_Version}".tar.gz rancher/"${Rancher_Version}" &>> "${Command_Output_log_file}"
