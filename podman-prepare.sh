@@ -317,7 +317,7 @@ prepare_k3s() {
   curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s-airgap-images-amd64.tar &>> "${Command_Output_log_file}"
   [[ "$?" != "0" ]] && echo "Download k3s-airgap-images-amd64.tar ${K3S_Version} failed" && exit 1
 
-  curl -# -OL https://github.com/k3s-io/k3s/releases/download/"{K3S_Version}"%2Bk3s1/k3s &>> "${Command_Output_log_file}"
+  curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s &>> "${Command_Output_log_file}"
   [[ "$?" != "0" ]] && echo "Download k3s Binary File ${K3S_Version} failed" && exit 1
 
   curl -sfL https://get.k3s.io/ --output install.sh && chmod +x install.sh &>> "${Command_Output_log_file}"
