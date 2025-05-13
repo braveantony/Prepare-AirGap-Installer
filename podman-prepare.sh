@@ -257,7 +257,7 @@ prepare_rancher() {
   done
 
   # 將 cert-manager 的所有 Container Images 打包成 .tar.gz 壓縮檔
-  podman save $(helm template cert-manager-*.tgz | awk '$1 ~ /image:/ {print $2}' | sed -e 's/\"//g' | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g") | gzip --stdout > cert-manager-image-"${Cert_Manager_Version}".tar.gz
+  podman save -m $(helm template cert-manager-*.tgz | awk '$1 ~ /image:/ {print $2}' | sed -e 's/\"//g' | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g") | gzip --stdout > cert-manager-image-"${Cert_Manager_Version}".tar.gz
   [[ "$?" != "0" ]] && echo "Podman save Cert-manager ${Cert_Manager_Version} images failed" && exit 1
 
   # 下載 Helm 壓縮檔
