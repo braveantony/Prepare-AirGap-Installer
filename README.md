@@ -115,6 +115,14 @@ Environment variables:
      定義 K3S 的版本
      預設是 'v1.35.3'。
 
+   - K3S_Revision
+     定義 K3S 的 revision 後綴
+     預設是 'k3s1'。
+
+   - K3S_Source_URL
+     定義下載 K3S airgap artifact 的來源 URL
+     預設是 'https://prime.ribs.rancher.io'（Rancher Prime Artifacts）。
+
    - Neuvector_Version
      定義 Neuvector 的版本
      預設是 '5.5.0'。

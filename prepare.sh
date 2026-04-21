@@ -68,6 +68,14 @@ Environment variables:
      定義 K3S 的版本
      預設是 'v1.35.3'。
 
+   - K3S_Revision
+     定義 K3S 的 revision 後綴
+     預設是 'k3s1'。
+
+   - K3S_Source_URL
+     定義下載 K3S airgap artifact 的來源 URL
+     預設是 'https://prime.ribs.rancher.io'（Rancher Prime Artifacts）。
+
    - Neuvector_Version
      定義 Neuvector 的版本
      預設是 '5.5.0'。
@@ -167,6 +175,16 @@ setup_env() {
   # make sure the version of the K3S is defined
   if [[ -z "${K3S_Version}" ]]; then
     K3S_Version="v1.35.3"
+  fi
+
+  # make sure the revision of the K3S is defined
+  if [[ -z "${K3S_Revision}" ]]; then
+    K3S_Revision="k3s1"
+  fi
+
+  # make sure the URL of the K3S source is defined
+  if [[ -z "${K3S_Source_URL}" ]]; then
+    K3S_Source_URL="https://prime.ribs.rancher.io"
   fi
 
   # make sure the version of the Neuvector is defined
@@ -493,10 +511,10 @@ prepare_k3s() {
   cd ~/work/k3s/"${K3S_Version}"
 
   # -sSL：silent + show-error + follow-redirect，去掉 -# 的 hash progress bar
-  logged_run "k3s: download k3s-airgap-images-amd64.tar" curl -sSL -O https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s-airgap-images-amd64.tar
+  logged_run "k3s: download k3s-airgap-images-amd64.tar" curl -sSL -O "${K3S_Source_URL}"/k3s/"${K3S_Version}"%2B"${K3S_Revision}"/k3s-airgap-images-amd64.tar
   [[ "$?" != "0" ]] && echo "Download k3s-airgap-images-amd64.tar ${K3S_Version} failed" && exit 1
 
-  logged_run "k3s: download k3s binary" curl -sSL -O https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s
+  logged_run "k3s: download k3s binary" curl -sSL -O "${K3S_Source_URL}"/k3s/"${K3S_Version}"%2B"${K3S_Revision}"/k3s
   [[ "$?" != "0" ]] && echo "Download k3s Binary File ${K3S_Version} failed" && exit 1
 
   logged_run "k3s: download install.sh" curl -sfL https://get.k3s.io/ --output install.sh
