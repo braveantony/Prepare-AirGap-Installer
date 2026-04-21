@@ -178,6 +178,12 @@ setup_env() {
   if [[ -z "${Private_Registry_Name}" ]]; then
     Private_Registry_Name="harbor.example.com"
   fi
+
+  # Helm 與 k8s n-3 相容性 pre-flight check；fail 時 exit 以避免打包出無法用的 airgap 包
+  if ! helm_version_skew_check; then
+    echo "[helm version skew] 版本不相容，停止執行。詳見 https://helm.sh/docs/topics/version_skew/" >&2
+    exit 1
+  fi
 }
 
 # 印進度列到終端（同一行覆寫），非 TTY 時靜默
@@ -224,6 +230,52 @@ logged_run() {
   local rc=$?
   local ts_end; ts_end=$(date '+%Y-%m-%d %H:%M:%S')
   echo "=== [$ts_end] EXIT: $rc ===" >> "$log"
+  return $rc
+}
+
+# 檢查 ${Helm_Version} compiled-against 的 k8s minor 與 ${RKE2_Version}／${K3S_Version}
+# 是否落在 Helm n-3 support window 內（https://helm.sh/docs/topics/version_skew/）。
+# 規律（v3.x 系列）：Helm 3.N 對應 k8s.io/client-go v0.(N+15) → k8s 1.(N+15)。
+# 例：v3.20 → k8s 1.35，支援 1.32 – 1.35；v3.14 → k8s 1.29，支援 1.26 – 1.29。
+# 非 v3.x（例：v4.x）目前不自動判斷，僅 echo 提示請使用者自行對照文件。
+helm_version_skew_check() {
+  local helm_ver="${Helm_Version#v}"
+  local helm_major="${helm_ver%%.*}"
+  local helm_minor_rest="${helm_ver#*.}"
+  local helm_minor="${helm_minor_rest%%.*}"
+
+  if [[ "$helm_major" != "3" ]]; then
+    echo "[helm version skew] Helm_Version=${Helm_Version} 非 v3.x，跳過自動相容性檢查；請自行對照 https://helm.sh/docs/topics/version_skew/" >&2
+    return 0
+  fi
+
+  local helm_k8s_target=$((helm_minor + 15))       # e.g. Helm 3.20 → k8s 1.35
+  local helm_k8s_min=$((helm_k8s_target - 3))      # n-3 下界，e.g. 1.32
+
+  local target_names=("RKE2" "K3S")
+  local target_vars=("${RKE2_Version}" "${K3S_Version}")
+  local rc=0
+  local i
+  for i in "${!target_vars[@]}"; do
+    local tv="${target_vars[$i]#v}"
+    local tn="${target_names[$i]}"
+    local t_major="${tv%%.*}"
+    local t_minor_rest="${tv#*.}"
+    local t_minor="${t_minor_rest%%.*}"
+
+    if [[ "$t_major" != "1" ]]; then
+      echo "[helm version skew] ${tn}_Version=${target_vars[$i]} 非 v1.x，跳過" >&2
+      continue
+    fi
+
+    if (( t_minor > helm_k8s_target )); then
+      echo "[helm version skew] ${tn}_Version=${target_vars[$i]}（k8s 1.${t_minor}）比 Helm_Version=${Helm_Version} compiled-against 的 k8s 1.${helm_k8s_target} 還新；超出 Helm 支援範圍 → 升 Helm_Version" >&2
+      rc=1
+    elif (( t_minor < helm_k8s_min )); then
+      echo "[helm version skew] ${tn}_Version=${target_vars[$i]}（k8s 1.${t_minor}）早於 Helm_Version=${Helm_Version} 的 n-3 下界 1.${helm_k8s_min} → 降 Helm_Version 或升 ${tn}_Version" >&2
+      rc=1
+    fi
+  done
   return $rc
 }
 
