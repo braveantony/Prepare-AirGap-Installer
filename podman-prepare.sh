@@ -323,8 +323,8 @@ prepare_rancher() {
   [[ "$?" != "0" ]] && echo "helm repo update (rancher-prime) failed" && exit 1
 
   # 下載 Rancher chart
-  logged_run "rancher: helm fetch rancher chart" helm fetch rancher-prime/rancher --version="${Rancher_Version}"
-  [[ "$?" != "0" ]] && echo "helm fetch rancher failed" && exit 1
+  logged_run "rancher: helm pull rancher chart" helm pull rancher-prime/rancher --version="${Rancher_Version}"
+  [[ "$?" != "0" ]] && echo "helm pull rancher failed" && exit 1
 
   # 新增和刷新 cert-manager repo
   logged_run "rancher: helm repo add jetstack" helm repo add jetstack https://charts.jetstack.io
@@ -333,8 +333,8 @@ prepare_rancher() {
   [[ "$?" != "0" ]] && echo "helm repo update (jetstack) failed" && exit 1
 
   # 下載 cert-manager chart
-  logged_run "rancher: helm fetch cert-manager chart" helm fetch jetstack/cert-manager --version "${Cert_Manager_Version}"
-  [[ "$?" != "0" ]] && echo "helm fetch Cert_Manager failed" && exit 1
+  logged_run "rancher: helm pull cert-manager chart" helm pull jetstack/cert-manager --version "${Cert_Manager_Version}"
+  [[ "$?" != "0" ]] && echo "helm pull Cert_Manager failed" && exit 1
 
   # 下載 cert-manager 要求的 CRD（-sSL：silent + show-error + follow-redirect）
   logged_run "rancher: download cert-manager CRD" curl -sSL -o cert-manager-crd.yaml https://github.com/cert-manager/cert-manager/releases/download/"${Cert_Manager_Version}"/cert-manager.crds.yaml
