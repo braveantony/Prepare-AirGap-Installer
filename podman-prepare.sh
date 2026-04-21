@@ -189,6 +189,9 @@ create_working_directory() {
 prepare_harbor() {
   setup_env
 
+  # 清除本產品前次產出的離線安裝包，避免與本次新版並存
+  rm -f ~/work/compressed_files/harbor-offline-*.tar.gz
+
   # 切換工作目錄
   cd ~/work/harbor/"${Harbor_Version}"
 
@@ -212,6 +215,10 @@ prepare_harbor() {
 # 準備 RKE2 全離線安裝包
 prepare_rke2() {
   setup_env
+
+  # 清除本產品前次產出的離線安裝包，避免與本次新版並存
+  rm -f ~/work/compressed_files/rke2-airgap-*.tar.gz
+
   # 切換工作目錄
   cd ~/work/rke2/"${RKE2_Version}"
 
@@ -242,6 +249,10 @@ prepare_rke2() {
 prepare_rancher() {
 
   setup_env
+
+  # 清除本產品前次產出的離線安裝包，避免與本次新版並存
+  rm -f ~/work/compressed_files/rancher-airgap-*.tar.gz
+
   # 切換工作目錄
   cd ~/work/rancher/"${Rancher_Version}"
 
@@ -338,6 +349,9 @@ prepare_rancher() {
 prepare_k3s() {
   setup_env
 
+  # 清除本產品前次產出的離線安裝包，避免與本次新版並存
+  rm -f ~/work/compressed_files/k3s-airgap-*.tar.gz
+
   # 切換工作目錄
   cd ~/work/k3s/"${K3S_Version}"
 
@@ -360,6 +374,9 @@ prepare_k3s() {
 
 prepare_neuvector() {
   setup_env
+
+  # 清除本產品前次產出的離線安裝包，避免與本次新版並存
+  rm -f ~/work/compressed_files/neuvector-airgap-*.tar.gz
 
   # 切換工作目錄
   cd ~/work/neuvector/"${Neuvector_Version}"
