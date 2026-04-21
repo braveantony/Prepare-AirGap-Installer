@@ -468,6 +468,13 @@ prepare_rancher() {
   # 對 Image List 進行排序和唯一化，以消除來源之間的任何重疊
   logged_run "rancher: sort-uniq rancher-images.txt" sort -u rancher-images.txt -o rancher-images.txt
 
+  # Rancher v2.12+ 的 rancher-images.txt 會包含以 `rancher/charts/` 開頭的 Helm chart
+  # OCI artifact（mediaType application/vnd.cncf.helm.config.v1+json），這些不是
+  # container image，用 podman/docker pull 會報 `unsupported image-specific operation
+  # on artifact` 並失敗；filter 掉讓主 pull loop 只處理 container image。
+  # 若未來需要一併打包這類 chart artifact，需改用 helm pull oci:// 或 oras pull。
+  logged_run "rancher: filter out Helm chart OCI artifacts" sed -i '/^rancher\/charts\//d' rancher-images.txt
+
   [[ "$?" == "0" ]] && echo "Start pulling and saving rancher ${Rancher_Version} images in the background..."
   # 下載離線安裝 Rancher 所需的所有 Container Images 並打包成 rancher-images.tar.gz
   rancher_total=$(wc -l < rancher-images.txt)
