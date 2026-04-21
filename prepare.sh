@@ -179,6 +179,11 @@ setup_env() {
   fi
 }
 
+# 印進度列到終端（同一行覆寫），非 TTY 時靜默
+print_progress() {
+  printf "\r\033[K[%s %d/%d] %s" "$1" "$2" "$3" "$4" >/dev/tty 2>/dev/null || true
+}
+
 # 建立工作目錄
 create_working_directory() {
   setup_env
@@ -283,16 +288,24 @@ prepare_rancher() {
   [[ "$?" != "0" ]] && echo "Download Cert_Manager CRD failed" && exit 1
 
   # 處理 cert-manager 的 Container Images
-  for i in $(helm template cert-manager-*.tgz | awk '$1 ~ /image:/ {print $2}' | sed -e 's/\"//g')
+  # 先計算 cert-manager 所需 image 總量，作為進度列的分母
+  cert_manager_images=$(helm template cert-manager-*.tgz | awk '$1 ~ /image:/ {print $2}' | sed -e 's/\"//g')
+  cert_manager_total=$(echo "$cert_manager_images" | wc -l)
+  idx=0
+  for image in $cert_manager_images
   do
+    idx=$((idx + 1))
+    print_progress "cert-manager" "$idx" "$cert_manager_total" "$image"
+
     # 下載 cert-manager 的 Container Images
-    sudo docker pull "$i" &>> "${Command_Output_log_file}"
-    [[ "$?" != "0" ]] && echo "Pull quay.io/jetstack/$i Container images failed" && exit 1
+    sudo docker pull "$image" &>> "${Command_Output_log_file}"
+    [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull quay.io/jetstack/$image Container images failed"; exit 1; }
 
     # 修改 cert-manager 的所有 Container Images Tag
-    sudo docker tag "${i}" "${Private_Registry_Name}"/rancher/"${i##*/}" &>> "${Command_Output_log_file}"
-    [[ "$?" != "0" ]] && echo "tag ${Private_Registry_Name}/rancher/${i##*/} Container images failed" && exit 1
+    sudo docker tag "${image}" "${Private_Registry_Name}"/rancher/"${image##*/}" &>> "${Command_Output_log_file}"
+    [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "tag ${Private_Registry_Name}/rancher/${image##*/} Container images failed"; exit 1; }
   done
+  printf "\n" >/dev/tty 2>/dev/null || true
 
   # 將 cert-manager 的所有 Container Images 打包成 .tar.gz 壓縮檔
   sudo docker save $(helm template cert-manager-*.tgz | awk '$1 ~ /image:/ {print $2}' | sed -e 's/\"//g' | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g") | gzip --stdout > cert-manager-image-"${Cert_Manager_Version}".tar.gz
@@ -314,12 +327,18 @@ prepare_rancher() {
 
   [[ "$?" == "0" ]] && echo "Start pulling and saving rancher ${Rancher_Version} images in the background..."
   # 下載離線安裝 Rancher 所需的所有 Container Images 並打包成 rancher-images.tar.gz
+  rancher_total=$(wc -l < rancher-images.txt)
+  idx=0
   while read image
   do
+    idx=$((idx + 1))
+    print_progress "rancher" "$idx" "$rancher_total" "$image"
     if ! sudo docker pull registry.rancher.com/"${image}" &>> "${Command_Output_log_file}"; then
+      printf "\n" >/dev/tty 2>/dev/null || true
       echo pull "$image" failed && exit 1
     fi
   done <<< $(cat rancher-images.txt)
+  printf "\n" >/dev/tty 2>/dev/null || true
 
   rancher_all_image=$(cat rancher-images.txt | sed 's|^|registry.rancher.com/|' | tr '\n' ' ')
   for n in $rancher_all_image
@@ -404,11 +423,16 @@ prepare_neuvector() {
   helm template core-*.tgz | awk '$1 ~ /image:/ {print $2}' | sed -e 's/\"//g' > images-list.txt 2>> "${Command_Output_log_file}"
 
   # get images
-  for i in $(cat images-list.txt)
+  neuvector_total=$(wc -l < images-list.txt)
+  idx=0
+  for image in $(cat images-list.txt)
   do
-    sudo docker pull $i &>> "${Command_Output_log_file}"
-    [[ "$?" != "0" ]] && echo "Pull $i failed" && exit 1
+    idx=$((idx + 1))
+    print_progress "neuvector" "$idx" "$neuvector_total" "$image"
+    sudo docker pull "$image" &>> "${Command_Output_log_file}"
+    [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull $image failed"; exit 1; }
   done
+  printf "\n" >/dev/tty 2>/dev/null || true
 
   # save images to tar.gz
   sudo docker save $(cat images-list.txt) | gzip --stdout > neuvector-images-"${Neuvector_Version}".tar.gz
