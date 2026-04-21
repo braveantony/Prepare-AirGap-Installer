@@ -244,12 +244,12 @@ prepare_harbor() {
   # 切換工作目錄
   cd ~/work/harbor/"${Harbor_Version}"
 
-  # 下載 Harbor 壓縮檔
-  logged_run "harbor: download offline-installer tgz" wget https://github.com/goharbor/harbor/releases/download/"${Harbor_Version}"/harbor-offline-installer-"${Harbor_Version}".tgz
+  # 下載 Harbor 壓縮檔（-nv：non-verbose，避免 dots 進度條灌 log，保留 "saved to" 摘要）
+  logged_run "harbor: download offline-installer tgz" wget -nv https://github.com/goharbor/harbor/releases/download/"${Harbor_Version}"/harbor-offline-installer-"${Harbor_Version}".tgz
   [[ "$?" != "0" ]] && echo "Download harbor-offline-installer-"${Harbor_Version}".tgz failed" && exit 1
 
   # 下載 Docker Compose 套件
-  logged_run "harbor: download docker-compose" wget https://github.com/docker/compose/releases/download/"${Docker_Compose_Version}"/docker-compose-linux-x86_64
+  logged_run "harbor: download docker-compose" wget -nv https://github.com/docker/compose/releases/download/"${Docker_Compose_Version}"/docker-compose-linux-x86_64
   [[ "$?" != "0" ]] && echo "Download docker-compose-linux-x86_64 "${Docker_Compose_Version}" failed" && exit 1
 
   # 將以上離線安裝 Harbor 所需之套件壓縮成一個檔案
@@ -336,8 +336,8 @@ prepare_rancher() {
   logged_run "rancher: helm fetch cert-manager chart" helm fetch jetstack/cert-manager --version "${Cert_Manager_Version}"
   [[ "$?" != "0" ]] && echo "helm fetch Cert_Manager failed" && exit 1
 
-  # 下載 cert-manager 要求的 CRD
-  logged_run "rancher: download cert-manager CRD" curl -L -o cert-manager-crd.yaml https://github.com/cert-manager/cert-manager/releases/download/"${Cert_Manager_Version}"/cert-manager.crds.yaml
+  # 下載 cert-manager 要求的 CRD（-sSL：silent + show-error + follow-redirect）
+  logged_run "rancher: download cert-manager CRD" curl -sSL -o cert-manager-crd.yaml https://github.com/cert-manager/cert-manager/releases/download/"${Cert_Manager_Version}"/cert-manager.crds.yaml
   [[ "$?" != "0" ]] && echo "Download Cert_Manager CRD failed" && exit 1
 
   # 處理 cert-manager 的 Container Images
@@ -434,10 +434,11 @@ prepare_k3s() {
   # 切換工作目錄
   cd ~/work/k3s/"${K3S_Version}"
 
-  logged_run "k3s: download k3s-airgap-images-amd64.tar" curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s-airgap-images-amd64.tar
+  # -sSL：silent + show-error + follow-redirect，去掉 -# 的 hash progress bar
+  logged_run "k3s: download k3s-airgap-images-amd64.tar" curl -sSL -O https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s-airgap-images-amd64.tar
   [[ "$?" != "0" ]] && echo "Download k3s-airgap-images-amd64.tar ${K3S_Version} failed" && exit 1
 
-  logged_run "k3s: download k3s binary" curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s
+  logged_run "k3s: download k3s binary" curl -sSL -O https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s
   [[ "$?" != "0" ]] && echo "Download k3s Binary File ${K3S_Version} failed" && exit 1
 
   logged_run "k3s: download install.sh" curl -sfL https://get.k3s.io/ --output install.sh
