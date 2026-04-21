@@ -184,6 +184,16 @@ print_progress() {
   printf "\r\033[K[%s %d/%d] %s" "$1" "$2" "$3" "$4" >/dev/tty 2>/dev/null || true
 }
 
+# 呼叫 function/command 並把 stdout/stderr 導入 log 檔；若呼叫者非零結束，
+# 整支腳本立即以相同 exit code 結束（用 PIPESTATUS[0] 取 pipeline 第一段狀態，
+# 避免 `prepare_* | tee` 把 function 包進 subshell 後 `exit 1` 只結束 subshell 的問題）
+run_step() {
+  "$@" 2>&1 | tee -a "${Command_Output_log_file}"
+  local rc=${PIPESTATUS[0]}
+  [[ $rc -ne 0 ]] && exit $rc
+  return 0
+}
+
 # 建立工作目錄
 create_working_directory() {
   setup_env
@@ -451,35 +461,37 @@ do
   option="$1"
   case $option in
     all)
-      create_working_directory 2>&1 | tee -a "${Command_Output_log_file}"
-      prepare_harbor 2>&1 | tee -a "${Command_Output_log_file}"
-      prepare_rke2 2>&1 | tee -a "${Command_Output_log_file}"
-      prepare_rancher 2>&1 | tee -a "${Command_Output_log_file}"
+      run_step create_working_directory
+      run_step prepare_harbor
+      run_step prepare_rke2
+      run_step prepare_rancher
+      run_step prepare_k3s
+      run_step prepare_neuvector
       exit 0
     ;;
     harbor)
-      create_working_directory 2>&1 | tee -a "${Command_Output_log_file}"
-      prepare_harbor 2>&1 | tee -a "${Command_Output_log_file}"
+      run_step create_working_directory
+      run_step prepare_harbor
       shift
     ;;
     rke2)
-      create_working_directory 2>&1 | tee -a "${Command_Output_log_file}"
-      prepare_rke2 2>&1 | tee -a "${Command_Output_log_file}"
+      run_step create_working_directory
+      run_step prepare_rke2
       shift
     ;;
     rancher)
-      create_working_directory 2>&1 | tee -a "${Command_Output_log_file}"
-      prepare_rancher 2>&1 | tee -a "${Command_Output_log_file}"
+      run_step create_working_directory
+      run_step prepare_rancher
       shift
     ;;
     k3s)
-      create_working_directory 2>&1 | tee -a "${Command_Output_log_file}"
-      prepare_k3s 2>&1 | tee -a "${Command_Output_log_file}"
+      run_step create_working_directory
+      run_step prepare_k3s
       shift
     ;;
     neuvector)
-      create_working_directory 2>&1 | tee -a "${Command_Output_log_file}"
-      prepare_neuvector 2>&1 | tee -a "${Command_Output_log_file}"
+      run_step create_working_directory
+      run_step prepare_neuvector
       shift
     ;;
     *)
