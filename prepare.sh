@@ -39,6 +39,14 @@ Environment variables:
      定義 RKE2 的版本
      預設是 'v1.27.11'。
 
+   - RKE2_Revision
+     定義 RKE2 的 revision 後綴
+     預設是 'rke2r1'。
+
+   - RKE2_Source_URL
+     定義下載 RKE2 airgap artifact 的來源 URL
+     預設是 'https://prime.ribs.rancher.io'（Rancher Prime Artifacts）。
+
    - Rancher_Version
      定義 Rancher 的版本
      預設是 'v2.8.2'。
@@ -121,6 +129,16 @@ setup_env() {
     RKE2_Version="v1.27.11"
   fi
 
+  # make sure the revision of the RKE2 is defined
+  if [[ -z "${RKE2_Revision}" ]]; then
+    RKE2_Revision="rke2r1"
+  fi
+
+  # make sure the URL of the RKE2 source is defined
+  if [[ -z "${RKE2_Source_URL}" ]]; then
+    RKE2_Source_URL="https://prime.ribs.rancher.io"
+  fi
+
   # make sure the version of the Rancher is defined
   if [[ -z "${Rancher_Version}" ]]; then
     Rancher_Version="v2.8.2"
@@ -189,13 +207,13 @@ prepare_rke2() {
   cd ~/work/rke2/"${RKE2_Version}"
 
   # 下載離線安裝 RKE2 所需 Image 之壓縮檔
-  curl -s -OL https://github.com/rancher/rke2/releases/download/"${RKE2_Version}"%2Brke2r1/rke2-images.linux-amd64.tar.zst &>> "${Command_Output_log_file}"
+  curl -s -OL "${RKE2_Source_URL}"/rke2/"${RKE2_Version}"%2B"${RKE2_Revision}"/rke2-images.linux-amd64.tar.zst &>> "${Command_Output_log_file}"
   [[ "$?" != "0" ]] && echo "Download rke2-images.linux-amd64.tar.zst "${RKE2_Version}" failed" && exit 1
 
-  curl -s -OL https://github.com/rancher/rke2/releases/download/"${RKE2_Version}"%2Brke2r1/rke2.linux-amd64.tar.gz &>> "${Command_Output_log_file}"
+  curl -s -OL "${RKE2_Source_URL}"/rke2/"${RKE2_Version}"%2B"${RKE2_Revision}"/rke2.linux-amd64.tar.gz &>> "${Command_Output_log_file}"
   [[ "$?" != "0" ]] && echo "Download rke2.linux-amd64.tar.gz "${RKE2_Version}" failed" && exit 1
 
-  curl -s -OL https://github.com/rancher/rke2/releases/download/"${RKE2_Version}"%2Brke2r1/sha256sum-amd64.txt &>> "${Command_Output_log_file}"
+  curl -s -OL "${RKE2_Source_URL}"/rke2/"${RKE2_Version}"%2B"${RKE2_Revision}"/sha256sum-amd64.txt &>> "${Command_Output_log_file}"
   [[ "$?" != "0" ]] && echo "Download sha256sum-amd64.txt "${RKE2_Version}" failed" && exit 1
 
   # 下載官網提供的離線安裝 RKE2 所需之安裝腳本，並賦予它執行權限

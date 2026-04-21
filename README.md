@@ -87,6 +87,14 @@ Environment variables:
      定義 RKE2 的版本
      預設是 'v1.27.11'。
 
+   - RKE2_Revision
+     定義 RKE2 的 revision 後綴
+     預設是 'rke2r1'。
+
+   - RKE2_Source_URL
+     定義下載 RKE2 airgap artifact 的來源 URL
+     預設是 'https://prime.ribs.rancher.io'（Rancher Prime Artifacts）。
+
    - Rancher_Version
      定義 Rancher 的版本
      預設是 'v2.8.2'。
