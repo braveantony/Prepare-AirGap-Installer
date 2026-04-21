@@ -97,7 +97,11 @@ Environment variables:
 
    - Rancher_Version
      定義 Rancher 的版本
-     預設是 'v2.14.0'。
+     預設是 'v2.13.4'。
+
+   - Rancher_Source_URL
+     定義下載 Rancher airgap artifact 的來源 URL
+     預設是 'https://prime.ribs.rancher.io'（Rancher Prime Artifacts）。
 
    - Helm_Version
      定義 Helm 的版本
@@ -156,7 +160,7 @@ Environment variables:
 │   ├── harbor-offline-v2.15.0.tar.gz   --> Harbor v2.15.0 版本的全離線安裝包
 │   ├── k3s-airgap-v1.35.3.tar.gz      --> K3S v1.35.3 版本的全離線安裝包
 │   ├── neuvector-airgap-5.5.0.tar.gz   --> Neuvector 5.5.0 版本的全離線安裝包
-│   └── rancher-airgap-v2.14.0.tar.gz    --> Rancher v2.14.0 版本的全離線安裝包
+│   └── rancher-airgap-v2.13.4.tar.gz    --> Rancher v2.13.4 版本的全離線安裝包
 │   └── rke2-airgap-v1.35.3.tar.gz     --> RKE2 v1.35.3 版本的全離線安裝包
 ├── harbor
 │   ├── v2.15.0
@@ -165,7 +169,7 @@ Environment variables:
 ├── neuvector
 │   └── 5.5.0
 ├── rancher
-│   └── v2.14.0
+│   └── v2.13.4
 └── rke2
     └── v1.35.3
 ```

@@ -49,7 +49,11 @@ Environment variables:
 
    - Rancher_Version
      定義 Rancher 的版本
-     預設是 'v2.14.0'。
+     預設是 'v2.13.4'。
+
+   - Rancher_Source_URL
+     定義下載 Rancher airgap artifact 的來源 URL
+     預設是 'https://prime.ribs.rancher.io'（Rancher Prime Artifacts）。
 
    - Helm_Version
      定義 Helm 的版本
@@ -141,7 +145,12 @@ setup_env() {
 
   # make sure the version of the Rancher is defined
   if [[ -z "${Rancher_Version}" ]]; then
-    Rancher_Version="v2.14.0"
+    Rancher_Version="v2.13.4"
+  fi
+
+  # make sure the URL of the Rancher source is defined
+  if [[ -z "${Rancher_Source_URL}" ]]; then
+    Rancher_Source_URL="https://prime.ribs.rancher.io"
   fi
 
   # make sure the version of the Helm is defined
@@ -285,7 +294,7 @@ prepare_rancher() {
   # 下載 Rancher Images List 文字檔及蒐集 Image 所需的 Shell Script
   for x in rancher-images.txt rancher-load-images.sh rancher-save-images.sh
   do
-    wget -q https://github.com/rancher/rancher/releases/download/"${Rancher_Version}"/"${x}" &>> "${Command_Output_log_file}"
+    wget -q "${Rancher_Source_URL}"/rancher/"${Rancher_Version}"/"${x}" &>> "${Command_Output_log_file}"
     [[ "$?" != "0" ]] && echo "Download ${x} failed" && exit 1
   done
 
