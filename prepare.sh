@@ -244,15 +244,16 @@ prepare_harbor() {
   cd ~/work/harbor/"${Harbor_Version}"
 
   # 下載 Harbor 壓縮檔
-  wget https://github.com/goharbor/harbor/releases/download/"${Harbor_Version}"/harbor-offline-installer-"${Harbor_Version}".tgz &>> "${Command_Output_log_file}"
+  logged_run "harbor: download offline-installer tgz" wget https://github.com/goharbor/harbor/releases/download/"${Harbor_Version}"/harbor-offline-installer-"${Harbor_Version}".tgz
   [[ "$?" != "0" ]] && echo "Download harbor-offline-installer-"${Harbor_Version}".tgz failed" && exit 1
 
   # 下載 Docker Compose 套件
-  wget https://github.com/docker/compose/releases/download/"${Docker_Compose_Version}"/docker-compose-linux-x86_64 &>> "${Command_Output_log_file}"
+  logged_run "harbor: download docker-compose" wget https://github.com/docker/compose/releases/download/"${Docker_Compose_Version}"/docker-compose-linux-x86_64
   [[ "$?" != "0" ]] && echo "Download docker-compose-linux-x86_64 "${Docker_Compose_Version}" failed" && exit 1
 
   # 將以上離線安裝 Harbor 所需之套件壓縮成一個檔案
-  cd ../..; tar -czvf compressed_files/harbor-offline-"${Harbor_Version}".tar.gz harbor/"${Harbor_Version}" &>> "${Command_Output_log_file}"
+  cd ../..
+  logged_run "harbor: tar airgap bundle" tar -czvf compressed_files/harbor-offline-"${Harbor_Version}".tar.gz harbor/"${Harbor_Version}"
   if [[ "$?" != "0" ]]; then
     echo "Preparing harbor full Air Gap installer failed" && exit 1
   else
@@ -271,21 +272,23 @@ prepare_rke2() {
   cd ~/work/rke2/"${RKE2_Version}"
 
   # 下載離線安裝 RKE2 所需 Image 之壓縮檔
-  curl -s -OL "${RKE2_Source_URL}"/rke2/"${RKE2_Version}"%2B"${RKE2_Revision}"/rke2-images.linux-amd64.tar.zst &>> "${Command_Output_log_file}"
+  logged_run "rke2: download rke2-images.linux-amd64.tar.zst" curl -s -OL "${RKE2_Source_URL}"/rke2/"${RKE2_Version}"%2B"${RKE2_Revision}"/rke2-images.linux-amd64.tar.zst
   [[ "$?" != "0" ]] && echo "Download rke2-images.linux-amd64.tar.zst "${RKE2_Version}" failed" && exit 1
 
-  curl -s -OL "${RKE2_Source_URL}"/rke2/"${RKE2_Version}"%2B"${RKE2_Revision}"/rke2.linux-amd64.tar.gz &>> "${Command_Output_log_file}"
+  logged_run "rke2: download rke2.linux-amd64.tar.gz" curl -s -OL "${RKE2_Source_URL}"/rke2/"${RKE2_Version}"%2B"${RKE2_Revision}"/rke2.linux-amd64.tar.gz
   [[ "$?" != "0" ]] && echo "Download rke2.linux-amd64.tar.gz "${RKE2_Version}" failed" && exit 1
 
-  curl -s -OL "${RKE2_Source_URL}"/rke2/"${RKE2_Version}"%2B"${RKE2_Revision}"/sha256sum-amd64.txt &>> "${Command_Output_log_file}"
+  logged_run "rke2: download sha256sum-amd64.txt" curl -s -OL "${RKE2_Source_URL}"/rke2/"${RKE2_Version}"%2B"${RKE2_Revision}"/sha256sum-amd64.txt
   [[ "$?" != "0" ]] && echo "Download sha256sum-amd64.txt "${RKE2_Version}" failed" && exit 1
 
   # 下載官網提供的離線安裝 RKE2 所需之安裝腳本，並賦予它執行權限
-  curl -sfL https://get.rke2.io --output install.sh && chmod +x install.sh &>> "${Command_Output_log_file}"
+  logged_run "rke2: download install.sh" curl -sfL https://get.rke2.io --output install.sh
   [[ "$?" != "0" ]] && echo "Download rke2 install.sh failed" && exit 1
+  logged_run "rke2: chmod install.sh" chmod +x install.sh
 
   # 將以上離線安裝 RKE2 所需之檔案，壓縮成一個檔案
-  cd ../..; tar -czvf compressed_files/rke2-airgap-"${RKE2_Version}".tar.gz rke2/"${RKE2_Version}" &>> "${Command_Output_log_file}"
+  cd ../..
+  logged_run "rke2: tar airgap bundle" tar -czvf compressed_files/rke2-airgap-"${RKE2_Version}".tar.gz rke2/"${RKE2_Version}"
   if [[ "$?" != "0" ]]; then
     echo "Preparing RKE2 Air Gap installer failed" && exit 1
   else
@@ -305,29 +308,31 @@ prepare_rancher() {
   cd ~/work/rancher/"${Rancher_Version}"
 
   # 安裝 helm
-  curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash &>> "${Command_Output_log_file}"
+  logged_run "rancher: install helm" bash -c 'curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash'
   [[ "$?" != "0" ]] && echo "Install helm failed" && exit 1
 
   # 新增並刷新 Rancher Prime 的 Helm Chart Repository
-  helm repo add rancher-prime https://charts.rancher.com/server-charts/prime &>> "${Command_Output_log_file}" && \
-  helm repo update &>> "${Command_Output_log_file}"
-  [[ "$?" != "0" ]] && echo "helm repo add or update rancher-prime failed" && exit 1
+  logged_run "rancher: helm repo add rancher-prime" helm repo add rancher-prime https://charts.rancher.com/server-charts/prime
+  [[ "$?" != "0" ]] && echo "helm repo add rancher-prime failed" && exit 1
+  logged_run "rancher: helm repo update (rancher-prime)" helm repo update
+  [[ "$?" != "0" ]] && echo "helm repo update (rancher-prime) failed" && exit 1
 
   # 下載 Rancher chart
-  helm fetch rancher-prime/rancher --version="${Rancher_Version}" &>> "${Command_Output_log_file}"
+  logged_run "rancher: helm fetch rancher chart" helm fetch rancher-prime/rancher --version="${Rancher_Version}"
   [[ "$?" != "0" ]] && echo "helm fetch rancher failed" && exit 1
 
   # 新增和刷新 cert-manager repo
-  helm repo add jetstack https://charts.jetstack.io &>> "${Command_Output_log_file}" && \
-  helm repo update &>> "${Command_Output_log_file}"
-  [[ "$?" != "0" ]] && echo "helm repo add or update cert-manager failed" && exit 1
+  logged_run "rancher: helm repo add jetstack" helm repo add jetstack https://charts.jetstack.io
+  [[ "$?" != "0" ]] && echo "helm repo add jetstack failed" && exit 1
+  logged_run "rancher: helm repo update (jetstack)" helm repo update
+  [[ "$?" != "0" ]] && echo "helm repo update (jetstack) failed" && exit 1
 
   # 下載 cert-manager chart
-  helm fetch jetstack/cert-manager --version "${Cert_Manager_Version}" &>> "${Command_Output_log_file}"
+  logged_run "rancher: helm fetch cert-manager chart" helm fetch jetstack/cert-manager --version "${Cert_Manager_Version}"
   [[ "$?" != "0" ]] && echo "helm fetch Cert_Manager failed" && exit 1
 
   # 下載 cert-manager 要求的 CRD
-  curl -L -o cert-manager-crd.yaml https://github.com/cert-manager/cert-manager/releases/download/"${Cert_Manager_Version}"/cert-manager.crds.yaml &>> "${Command_Output_log_file}"
+  logged_run "rancher: download cert-manager CRD" curl -L -o cert-manager-crd.yaml https://github.com/cert-manager/cert-manager/releases/download/"${Cert_Manager_Version}"/cert-manager.crds.yaml
   [[ "$?" != "0" ]] && echo "Download Cert_Manager CRD failed" && exit 1
 
   # 處理 cert-manager 的 Container Images
@@ -341,33 +346,35 @@ prepare_rancher() {
     print_progress "cert-manager" "$idx" "$cert_manager_total" "$image"
 
     # 下載 cert-manager 的 Container Images
-    sudo docker pull "$image" &>> "${Command_Output_log_file}"
+    logged_run "cert-manager [$idx/$cert_manager_total] pull $image" sudo docker pull "$image"
     [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull quay.io/jetstack/$image Container images failed"; exit 1; }
 
     # 修改 cert-manager 的所有 Container Images Tag
-    sudo docker tag "${image}" "${Private_Registry_Name}"/rancher/"${image##*/}" &>> "${Command_Output_log_file}"
+    logged_run "cert-manager [$idx/$cert_manager_total] tag $image" sudo docker tag "${image}" "${Private_Registry_Name}"/rancher/"${image##*/}"
     [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "tag ${Private_Registry_Name}/rancher/${image##*/} Container images failed"; exit 1; }
   done
   printf "\n" >/dev/tty 2>/dev/null || true
 
   # 將 cert-manager 的所有 Container Images 打包成 .tar.gz 壓縮檔
   # 復用前面計算好的 $cert_manager_images，避免重新跑一次 helm template
-  sudo docker save $(echo "$cert_manager_images" | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g") | gzip --stdout > cert-manager-image-"${Cert_Manager_Version}".tar.gz
+  # pipe 用 bash -c 包，set -o pipefail 讓 save 或 gzip 任一段失敗都能正確回傳
+  cert_manager_renamed_images=$(echo "$cert_manager_images" | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g" | tr '\n' ' ')
+  logged_run "cert-manager: save images tar.gz" bash -c "set -o pipefail; sudo docker save ${cert_manager_renamed_images} | gzip --stdout > cert-manager-image-${Cert_Manager_Version}.tar.gz"
   [[ "$?" != "0" ]] && echo "Docker save Cert-manager ${Cert_Manager_Version} images failed" && exit 1
 
   # 下載 Helm 壓縮檔
-  wget -q https://get.helm.sh/helm-"${Helm_Version}"-linux-amd64.tar.gz -O helm-"${Helm_Version}"-linux-amd64.tar.gz &>> "${Command_Output_log_file}"
+  logged_run "rancher: download helm ${Helm_Version} tarball" wget -q https://get.helm.sh/helm-"${Helm_Version}"-linux-amd64.tar.gz -O helm-"${Helm_Version}"-linux-amd64.tar.gz
   [[ "$?" != "0" ]] && echo "Download helm ${Helm_Version} failed"
 
   # 下載 Rancher Images List 文字檔及蒐集 Image 所需的 Shell Script
   for x in rancher-images.txt rancher-load-images.sh rancher-save-images.sh
   do
-    wget -q "${Rancher_Source_URL}"/rancher/"${Rancher_Version}"/"${x}" &>> "${Command_Output_log_file}"
+    logged_run "rancher: download $x" wget -q "${Rancher_Source_URL}"/rancher/"${Rancher_Version}"/"${x}"
     [[ "$?" != "0" ]] && echo "Download ${x} failed" && exit 1
   done
 
   # 對 Image List 進行排序和唯一化，以消除來源之間的任何重疊
-  sort -u rancher-images.txt -o rancher-images.txt &>> "${Command_Output_log_file}"
+  logged_run "rancher: sort-uniq rancher-images.txt" sort -u rancher-images.txt -o rancher-images.txt
 
   [[ "$?" == "0" ]] && echo "Start pulling and saving rancher ${Rancher_Version} images in the background..."
   # 下載離線安裝 Rancher 所需的所有 Container Images 並打包成 rancher-images.tar.gz
@@ -377,7 +384,7 @@ prepare_rancher() {
   do
     idx=$((idx + 1))
     print_progress "rancher" "$idx" "$rancher_total" "$image"
-    if ! sudo docker pull registry.rancher.com/"${image}" &>> "${Command_Output_log_file}"; then
+    if ! logged_run "rancher [$idx/$rancher_total] pull $image" sudo docker pull registry.rancher.com/"${image}"; then
       printf "\n" >/dev/tty 2>/dev/null || true
       echo pull "$image" failed && exit 1
     fi
@@ -388,20 +395,22 @@ prepare_rancher() {
   for n in $rancher_all_image
   do
     if ! sudo docker images "$n" | grep -q "${n%:*}"; then
-      if ! sudo docker pull registry.rancher.com/"$n" &>> "${Command_Output_log_file}"; then
+      if ! logged_run "rancher retry pull $n" sudo docker pull registry.rancher.com/"$n"; then
         echo pull "$n" failed twice && exit 1
       fi
     else
-      sudo docker tag "${n}" "${Private_Registry_Name}"/rancher/"${n##*/}" &>> "${Command_Output_log_file}"
+      logged_run "rancher retry tag $n" sudo docker tag "${n}" "${Private_Registry_Name}"/rancher/"${n##*/}"
       [[ "$?" != "0" ]] && echo "tag ${Private_Registry_Name}/rancher/${n##*/} Container images failed" && exit 1
     fi
   done
 
+  # save 為 pipe，用 bash -c + pipefail 包進 logged_run
   rename_rancher_all_image=$(cat rancher-images.txt | sed "s|^|${Private_Registry_Name}/|" | tr '\n' ' ')
-  sudo docker save $rename_rancher_all_image | gzip --stdout > rancher-"${Rancher_Version}"-image.tar.gz
+  logged_run "rancher: save images tar.gz" bash -c "set -o pipefail; sudo docker save ${rename_rancher_all_image} | gzip --stdout > rancher-${Rancher_Version}-image.tar.gz"
   [[ (( $(stat -c%s rancher-"${Rancher_Version}"-image.tar.gz) -lt 50000000 )) ]] && echo "Docker Save rancher ${Rancher_Version} images failed" && exit 1
 
-  cd ../..; tar -czf compressed_files/rancher-airgap-"${Rancher_Version}".tar.gz rancher/"${Rancher_Version}" &>> "${Command_Output_log_file}"
+  cd ../..
+  logged_run "rancher: tar airgap bundle" tar -czf compressed_files/rancher-airgap-"${Rancher_Version}".tar.gz rancher/"${Rancher_Version}"
   if [[ "$?" != "0" ]]; then
     echo "Preparing Rancher "${Rancher_Version}" Air Gap installer failed" && exit 1
   else
@@ -418,16 +427,18 @@ prepare_k3s() {
   # 切換工作目錄
   cd ~/work/k3s/"${K3S_Version}"
 
-  curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s-airgap-images-amd64.tar &>> "${Command_Output_log_file}"
+  logged_run "k3s: download k3s-airgap-images-amd64.tar" curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s-airgap-images-amd64.tar
   [[ "$?" != "0" ]] && echo "Download k3s-airgap-images-amd64.tar ${K3S_Version} failed" && exit 1
 
-  curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s &>> "${Command_Output_log_file}"
+  logged_run "k3s: download k3s binary" curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s
   [[ "$?" != "0" ]] && echo "Download k3s Binary File ${K3S_Version} failed" && exit 1
 
-  curl -sfL https://get.k3s.io/ --output install.sh && chmod +x install.sh &>> "${Command_Output_log_file}"
+  logged_run "k3s: download install.sh" curl -sfL https://get.k3s.io/ --output install.sh
   [[ "$?" != "0" ]] && echo "Download k3s Official Installation Script failed" && exit 1
+  logged_run "k3s: chmod install.sh" chmod +x install.sh
 
-  cd ../..; tar -czf compressed_files/k3s-airgap-"${K3S_Version}".tar.gz k3s/"${K3S_Version}"
+  cd ../..
+  logged_run "k3s: tar airgap bundle" tar -czf compressed_files/k3s-airgap-"${K3S_Version}".tar.gz k3s/"${K3S_Version}"
   if [[ "$?" != "0" ]]; then
     echo "Preparing K3S ${K3S_Version} Air Gap installer failed" && exit 1
   else
@@ -445,22 +456,22 @@ prepare_neuvector() {
   cd ~/work/neuvector/"${Neuvector_Version}"
 
   # install helm
-  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash &>> "${Command_Output_log_file}"
+  logged_run "neuvector: install helm" bash -c 'curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash'
   [[ "$?" != "0" ]] && echo "Install helm failed" && exit 1
 
   # add repo
-  helm repo add neuvector https://neuvector.github.io/neuvector-helm/ &>> "${Command_Output_log_file}"
+  logged_run "neuvector: helm repo add" helm repo add neuvector https://neuvector.github.io/neuvector-helm/
   [[ "$?" != "0" ]] && echo "Add Neuvector Helm Repo failed" && exit 1
 
   # update local chart
-  helm repo update &>> "${Command_Output_log_file}"
+  logged_run "neuvector: helm repo update" helm repo update
   [[ "$?" != "0" ]] && echo "Update Neuvector Helm Repo failed" && exit 1
 
-  # get specify chart version
+  # get specify chart version（複雜 pipe，輸出結果賦值回變數；不包 logged_run）
   Chart_Version=$(helm search repo neuvector/core --versions | grep "${Neuvector_Version}" | head -n 1 | fmt -u | cut -d " " -f 2)
 
   # pull
-  helm pull neuvector/core --version "${Chart_Version}" &>> "${Command_Output_log_file}"
+  logged_run "neuvector: helm pull core ${Chart_Version}" helm pull neuvector/core --version "${Chart_Version}"
   [[ "$?" != "0" ]] && echo "Pull Neuvector ${Neuvector_Version} Helm packages failed" && exit 1
 
   # create image list
@@ -473,16 +484,18 @@ prepare_neuvector() {
   do
     idx=$((idx + 1))
     print_progress "neuvector" "$idx" "$neuvector_total" "$image"
-    sudo docker pull "$image" &>> "${Command_Output_log_file}"
+    logged_run "neuvector [$idx/$neuvector_total] pull $image" sudo docker pull "$image"
     [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull $image failed"; exit 1; }
   done
   printf "\n" >/dev/tty 2>/dev/null || true
 
-  # save images to tar.gz
-  sudo docker save $(cat images-list.txt) | gzip --stdout > neuvector-images-"${Neuvector_Version}".tar.gz
+  # save images to tar.gz（pipe 用 bash -c + pipefail 包）
+  neuvector_all_images=$(tr '\n' ' ' < images-list.txt)
+  logged_run "neuvector: save images tar.gz" bash -c "set -o pipefail; sudo docker save ${neuvector_all_images} | gzip --stdout > neuvector-images-${Neuvector_Version}.tar.gz"
   [[ "$?" != "0" ]] && echo "Docker save Neuvector images ${Neuvector_Version} failed" && exit 1
 
-  cd ../..; tar -czf compressed_files/neuvector-airgap-"${Neuvector_Version}".tar.gz neuvector/"${Neuvector_Version}"
+  cd ../..
+  logged_run "neuvector: tar airgap bundle" tar -czf compressed_files/neuvector-airgap-"${Neuvector_Version}".tar.gz neuvector/"${Neuvector_Version}"
   if [[ "$?" != "0" ]]; then
     echo "Preparing Neuvector Air Gap installer failed" && exit 1
   else
