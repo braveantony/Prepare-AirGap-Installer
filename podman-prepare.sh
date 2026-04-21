@@ -340,6 +340,10 @@ prepare_rancher() {
   logged_run "rancher: download cert-manager CRD" curl -sSL -o cert-manager-crd.yaml https://github.com/cert-manager/cert-manager/releases/download/"${Cert_Manager_Version}"/cert-manager.crds.yaml
   [[ "$?" != "0" ]] && echo "Download Cert_Manager CRD failed" && exit 1
 
+  # 下載 cert-manager 官方 combined install manifest（kubectl apply 路徑用；版本跟著 ${Cert_Manager_Version}）
+  logged_run "rancher: download cert-manager manifest" curl -sSL -o cert-manager.yaml https://github.com/cert-manager/cert-manager/releases/download/"${Cert_Manager_Version}"/cert-manager.yaml
+  [[ "$?" != "0" ]] && echo "Download Cert_Manager manifest failed" && exit 1
+
   # 處理 cert-manager 的 Container Images
   # 先計算 cert-manager 所需 image 總量，作為進度列的分母
   cert_manager_images=$(helm template cert-manager-*.tgz | awk '$1 ~ /image:/ {print $2}' | sed -e 's/\"//g')
