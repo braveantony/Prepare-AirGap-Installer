@@ -114,7 +114,7 @@ setup_env() {
   for command in wget curl podman
   do
     if ! which $command &> /dev/null; then
-      echo "${Command} command not found!" && exit 1
+      echo "${command} command not found!" && exit 1
     fi
   done
 
@@ -318,7 +318,8 @@ prepare_rancher() {
   printf "\n" >/dev/tty 2>/dev/null || true
 
   # 將 cert-manager 的所有 Container Images 打包成 .tar.gz 壓縮檔
-  podman save -m $(helm template cert-manager-*.tgz | awk '$1 ~ /image:/ {print $2}' | sed -e 's/\"//g' | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g") | gzip --stdout > cert-manager-image-"${Cert_Manager_Version}".tar.gz
+  # 復用前面計算好的 $cert_manager_images，避免重新跑一次 helm template
+  podman save -m $(echo "$cert_manager_images" | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g") | gzip --stdout > cert-manager-image-"${Cert_Manager_Version}".tar.gz
   [[ "$?" != "0" ]] && echo "Podman save Cert-manager ${Cert_Manager_Version} images failed" && exit 1
 
   # 下載 Helm 壓縮檔
@@ -445,7 +446,7 @@ prepare_neuvector() {
   printf "\n" >/dev/tty 2>/dev/null || true
 
   # save images to tar.gz
-  podman save $(cat images-list.txt) | gzip --stdout > neuvector-images-"${Neuvector_Version}".tar.gz
+  podman save -m $(cat images-list.txt) | gzip --stdout > neuvector-images-"${Neuvector_Version}".tar.gz
   [[ "$?" != "0" ]] && echo "Podman save Neuvector images ${Neuvector_Version} failed" && exit 1
 
   cd ../..; tar -czf compressed_files/neuvector-airgap-"${Neuvector_Version}".tar.gz neuvector/"${Neuvector_Version}"

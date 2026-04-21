@@ -114,7 +114,7 @@ setup_env() {
   for command in wget curl docker
   do
     if ! which $command &> /dev/null; then
-      echo "${Command} command not found!" && exit 1
+      echo "${command} command not found!" && exit 1
     fi
   done
 
@@ -318,7 +318,8 @@ prepare_rancher() {
   printf "\n" >/dev/tty 2>/dev/null || true
 
   # 將 cert-manager 的所有 Container Images 打包成 .tar.gz 壓縮檔
-  sudo docker save $(helm template cert-manager-*.tgz | awk '$1 ~ /image:/ {print $2}' | sed -e 's/\"//g' | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g") | gzip --stdout > cert-manager-image-"${Cert_Manager_Version}".tar.gz
+  # 復用前面計算好的 $cert_manager_images，避免重新跑一次 helm template
+  sudo docker save $(echo "$cert_manager_images" | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g") | gzip --stdout > cert-manager-image-"${Cert_Manager_Version}".tar.gz
   [[ "$?" != "0" ]] && echo "Docker save Cert-manager ${Cert_Manager_Version} images failed" && exit 1
 
   # 下載 Helm 壓縮檔
@@ -387,7 +388,7 @@ prepare_k3s() {
   curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s-airgap-images-amd64.tar &>> "${Command_Output_log_file}"
   [[ "$?" != "0" ]] && echo "Download k3s-airgap-images-amd64.tar ${K3S_Version} failed" && exit 1
 
-  curl -# -OL https://github.com/k3s-io/k3s/releases/download/"{K3S_Version}"%2Bk3s1/k3s &>> "${Command_Output_log_file}"
+  curl -# -OL https://github.com/k3s-io/k3s/releases/download/"${K3S_Version}"%2Bk3s1/k3s &>> "${Command_Output_log_file}"
   [[ "$?" != "0" ]] && echo "Download k3s Binary File ${K3S_Version} failed" && exit 1
 
   curl -sfL https://get.k3s.io/ --output install.sh && chmod +x install.sh &>> "${Command_Output_log_file}"
