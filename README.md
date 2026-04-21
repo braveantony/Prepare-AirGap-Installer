@@ -40,10 +40,10 @@ chmod +x *.sh
 螢幕輸出 : 
 
 ```
-Prepare Harbor v2.10.0 OK.
-Prepare RKE2 v1.27.11 OK.
-Prepare K3S v1.27.11 OK.
-Prepare Neuvector 5.3.0 OK.
+Prepare Harbor v2.15.0 OK.
+Prepare RKE2 v1.35.3 OK.
+Prepare K3S v1.35.3 OK.
+Prepare Neuvector 5.5.0 OK.
 ```
 
 檢查全離線安裝包
@@ -51,10 +51,10 @@ Prepare Neuvector 5.3.0 OK.
 ```
 $ ls -lh ~/work/compressed_files/
 total 1.9G
--rw-r--r-- 1 bigred bigred 630M Mar 15 15:15 harbor-offline-v2.10.0.tar.gz
--rw-r--r-- 1 bigred bigred 192M Mar 15 15:17 k3s-airgap-v1.27.11.tar.gz
--rw-r--r-- 1 bigred bigred  91M Mar 15 15:18 neuvector-airgap-5.3.0.tar.gz
--rw-r--r-- 1 bigred bigred 956M Mar 15 15:17 rke2-airgap-v1.27.11.tar.gz
+-rw-r--r-- 1 bigred bigred 630M Mar 15 15:15 harbor-offline-v2.15.0.tar.gz
+-rw-r--r-- 1 bigred bigred 192M Mar 15 15:17 k3s-airgap-v1.35.3.tar.gz
+-rw-r--r-- 1 bigred bigred  91M Mar 15 15:18 neuvector-airgap-5.5.0.tar.gz
+-rw-r--r-- 1 bigred bigred 956M Mar 15 15:17 rke2-airgap-v1.35.3.tar.gz
 ```
 
 
@@ -77,19 +77,19 @@ Environment variables:
 
    - Harbor_Version
      定義 Harbor 的版本
-     預設是 'v2.10.0'。
+     預設是 'v2.15.0'。
 
    - Docker_Compose_Version
      定義 docker-compose 的版本
-     預設是 'v2.24.7'。
+     預設是 'v2.40.3'。
 
    - RKE2_Version
      定義 RKE2 的版本
-     預設是 'v1.27.11'。
+     預設是 'v1.35.3'。
 
    - RKE2_Revision
      定義 RKE2 的 revision 後綴
-     預設是 'rke2r1'。
+     預設是 'rke2r3'。
 
    - RKE2_Source_URL
      定義下載 RKE2 airgap artifact 的來源 URL
@@ -97,11 +97,11 @@ Environment variables:
 
    - Rancher_Version
      定義 Rancher 的版本
-     預設是 'v2.8.2'。
+     預設是 'v2.14.0'。
 
    - Helm_Version
      定義 Helm 的版本
-     預設是 'v3.14.2'。
+     預設是 'v3.20.2'。
 
    - Cert_Manager_Version
      定義 Cert-manager 的版本
@@ -109,11 +109,11 @@ Environment variables:
 
    - K3S_Version
      定義 K3S 的版本
-     預設是 'v1.27.11'。
+     預設是 'v1.35.3'。
 
    - Neuvector_Version
      定義 Neuvector 的版本
-     預設是 '5.3.0'。
+     預設是 '5.5.0'。
 
    - Private_Registry_Name
      定義企業內部私有 Image Registry 的名稱
@@ -153,21 +153,21 @@ Environment variables:
 ```
 ~/work/
 ├── compressed_files
-│   ├── harbor-offline-v2.10.0.tar.gz   --> Harbor v2.10.0 版本的全離線安裝包
-│   ├── k3s-airgap-v1.27.11.tar.gz      --> K3S v1.27.11 版本的全離線安裝包
-│   ├── neuvector-airgap-5.3.0.tar.gz   --> Neuvector 5.3.0 版本的全離線安裝包
-│   └── rancher-airgap-v2.8.2.tar.gz    --> Rancher v2.8.2 版本的全離線安裝包
-│   └── rke2-airgap-v1.27.11.tar.gz     --> RKE2 v1.27.11 版本的全離線安裝包
+│   ├── harbor-offline-v2.15.0.tar.gz   --> Harbor v2.15.0 版本的全離線安裝包
+│   ├── k3s-airgap-v1.35.3.tar.gz      --> K3S v1.35.3 版本的全離線安裝包
+│   ├── neuvector-airgap-5.5.0.tar.gz   --> Neuvector 5.5.0 版本的全離線安裝包
+│   └── rancher-airgap-v2.14.0.tar.gz    --> Rancher v2.14.0 版本的全離線安裝包
+│   └── rke2-airgap-v1.35.3.tar.gz     --> RKE2 v1.35.3 版本的全離線安裝包
 ├── harbor
-│   ├── v2.10.0
+│   ├── v2.15.0
 ├── k3s
-│   └── v1.27.11
+│   └── v1.35.3
 ├── neuvector
-│   └── 5.3.0
+│   └── 5.5.0
 ├── rancher
-│   └── v2.8.2
+│   └── v2.14.0
 └── rke2
-    └── v1.27.11
+    └── v1.35.3
 ```
 
 ## Log

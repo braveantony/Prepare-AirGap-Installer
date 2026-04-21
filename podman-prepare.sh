@@ -29,19 +29,19 @@ Environment variables:
 
    - Harbor_Version
      定義 Harbor 的版本
-     預設是 'v2.10.0'。
+     預設是 'v2.15.0'。
 
    - Docker_Compose_Version
      定義 docker-compose 的版本
-     預設是 'v2.24.7'。
+     預設是 'v2.40.3'。
 
    - RKE2_Version
      定義 RKE2 的版本
-     預設是 'v1.27.11'。
+     預設是 'v1.35.3'。
 
    - RKE2_Revision
      定義 RKE2 的 revision 後綴
-     預設是 'rke2r1'。
+     預設是 'rke2r3'。
 
    - RKE2_Source_URL
      定義下載 RKE2 airgap artifact 的來源 URL
@@ -49,11 +49,11 @@ Environment variables:
 
    - Rancher_Version
      定義 Rancher 的版本
-     預設是 'v2.8.2'。
+     預設是 'v2.14.0'。
 
    - Helm_Version
      定義 Helm 的版本
-     預設是 'v3.14.2'。
+     預設是 'v3.20.2'。
 
    - Cert_Manager_Version
      定義 Cert-manager 的版本
@@ -61,11 +61,11 @@ Environment variables:
 
    - K3S_Version
      定義 K3S 的版本
-     預設是 'v1.27.11'。
+     預設是 'v1.35.3'。
 
    - Neuvector_Version
      定義 Neuvector 的版本
-     預設是 '5.3.0'。
+     預設是 '5.5.0'。
 
    - Private_Registry_Name
      定義企業內部私有 Image Registry 的名稱
@@ -116,22 +116,22 @@ setup_env() {
 
   # make sure the version of the Harbor is defined
   if [[ -z "${Harbor_Version}" ]]; then
-    Harbor_Version="v2.10.0"
+    Harbor_Version="v2.15.0"
   fi
 
   # make sure the version of the Docker-compose is defined
   if [[ -z "${Docker_Compose_Version}" ]]; then
-    Docker_Compose_Version="v2.24.7"
+    Docker_Compose_Version="v2.40.3"
   fi
 
   # make sure the version of the RKE2 is defined
   if [[ -z "${RKE2_Version}" ]]; then
-    RKE2_Version="v1.27.11"
+    RKE2_Version="v1.35.3"
   fi
 
   # make sure the revision of the RKE2 is defined
   if [[ -z "${RKE2_Revision}" ]]; then
-    RKE2_Revision="rke2r1"
+    RKE2_Revision="rke2r3"
   fi
 
   # make sure the URL of the RKE2 source is defined
@@ -141,12 +141,12 @@ setup_env() {
 
   # make sure the version of the Rancher is defined
   if [[ -z "${Rancher_Version}" ]]; then
-    Rancher_Version="v2.8.2"
+    Rancher_Version="v2.14.0"
   fi
 
   # make sure the version of the Helm is defined
   if [[ -z "${Helm_Version}" ]]; then
-    Helm_Version="v3.14.2"
+    Helm_Version="v3.20.2"
   fi
 
   # make sure the version of the Cert-Manager is defined
@@ -156,12 +156,12 @@ setup_env() {
 
   # make sure the version of the K3S is defined
   if [[ -z "${K3S_Version}" ]]; then
-    K3S_Version="v1.27.11"
+    K3S_Version="v1.35.3"
   fi
 
   # make sure the version of the Neuvector is defined
   if [[ -z "${Neuvector_Version}" ]]; then
-    Neuvector_Version="5.3.0"
+    Neuvector_Version="5.5.0"
   fi
 
   # make sure the name of the Private Images Registry is defined
