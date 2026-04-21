@@ -236,6 +236,7 @@ create_working_directory() {
 # 準備 Harbor 全離線安裝包
 prepare_harbor() {
   setup_env
+  log_section "prepare_harbor START (Harbor_Version=${Harbor_Version})"
 
   # 清除本產品前次產出的離線安裝包，避免與本次新版並存
   rm -f ~/work/compressed_files/harbor-offline-*.tar.gz
@@ -259,11 +260,13 @@ prepare_harbor() {
   else
     echo "Prepare Harbor "${Harbor_Version}" OK."
   fi
+  log_section "prepare_harbor END"
 }
 
 # 準備 RKE2 全離線安裝包
 prepare_rke2() {
   setup_env
+  log_section "prepare_rke2 START (RKE2_Version=${RKE2_Version}, RKE2_Revision=${RKE2_Revision})"
 
   # 清除本產品前次產出的離線安裝包，避免與本次新版並存
   rm -f ~/work/compressed_files/rke2-airgap-*.tar.gz
@@ -294,12 +297,14 @@ prepare_rke2() {
   else
     echo "Prepare RKE2 "${RKE2_Version}" OK."
   fi
+  log_section "prepare_rke2 END"
 }
 
 # 準備 Rancher Prime 全離線安裝包
 prepare_rancher() {
 
   setup_env
+  log_section "prepare_rancher START (Rancher_Version=${Rancher_Version})"
 
   # 清除本產品前次產出的離線安裝包，避免與本次新版並存
   rm -f ~/work/compressed_files/rancher-airgap-*.tar.gz
@@ -416,10 +421,12 @@ prepare_rancher() {
   else
     echo "Prepare Rancher "${Rancher_Version}" OK."
   fi
+  log_section "prepare_rancher END"
 }
 
 prepare_k3s() {
   setup_env
+  log_section "prepare_k3s START (K3S_Version=${K3S_Version})"
 
   # 清除本產品前次產出的離線安裝包，避免與本次新版並存
   rm -f ~/work/compressed_files/k3s-airgap-*.tar.gz
@@ -444,10 +451,12 @@ prepare_k3s() {
   else
     echo "Prepare K3S "${K3S_Version}" OK."
   fi
+  log_section "prepare_k3s END"
 }
 
 prepare_neuvector() {
   setup_env
+  log_section "prepare_neuvector START (Neuvector_Version=${Neuvector_Version})"
 
   # 清除本產品前次產出的離線安裝包，避免與本次新版並存
   rm -f ~/work/compressed_files/neuvector-airgap-*.tar.gz
@@ -501,6 +510,7 @@ prepare_neuvector() {
   else
     echo "Prepare Neuvector ${Neuvector_Version} OK."
   fi
+  log_section "prepare_neuvector END"
 }
 
 while [[ "$#" -gt "0" ]]
