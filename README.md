@@ -156,20 +156,20 @@ Environment variables:
 ## Example:
   ### 一次準備全部五個產品（Harbor、RKE2、Rancher、K3S、Neuvector），並指定 Harbor 特定版本
   ```
-  Harbor_Version=v2.7.0 ./podman-prepare.sh all
+  Harbor_Version=v2.15.0 ./podman-prepare.sh all
   ```
-  ### 只準備 Rancher 的全離線安裝包，並且指定安裝 Rancher v2.7.9 版本
+  ### 只準備 Rancher 的全離線安裝包，並且指定安裝 Rancher v2.13.4 版本
   ```
-  Rancher_Version=v2.7.9 ./podman-prepare.sh rancher
+  Rancher_Version=v2.13.4 ./podman-prepare.sh rancher
   ```
-  ### 準備 Neuvector 的全離線安裝包，並且指定安裝 Neuvector 5.2.0 版本
+  ### 準備 Neuvector 的全離線安裝包，並且指定安裝 Neuvector 5.5.0 版本
   ```
-  Neuvector_Version=5.2.0 ./podman-prepare.sh neuvector
+  Neuvector_Version=5.5.0 ./podman-prepare.sh neuvector
   ```
 
-  ### 同時準備 Rancher、Harbor 和 K3S 的全離線安裝包，分別指定安裝 v2.7.9、v2.7.0 和 v1.25.9 版本，並設定私有 Image Registry 的名稱
+  ### 同時準備 Rancher、Harbor 和 K3S 的全離線安裝包，分別指定安裝 v2.13.4、v2.15.0 和 v1.35.3 版本，並設定私有 Image Registry 的名稱
   ```
-  Rancher_Version=v2.7.9 Harbor_Version=v2.7.0 K3S_Version=v1.25.9 \
+  Rancher_Version=v2.13.4 Harbor_Version=v2.15.0 K3S_Version=v1.35.3 \
   Private_Registry_Name="antony-harbor.example.com" \
   ./podman-prepare.sh rancher harbor k3s
   ```
@@ -177,8 +177,33 @@ Environment variables:
   ### 覆寫 RKE2 來源 URL 與 revision（從 Prime Artifacts 換回 GitHub releases）
   ```
   RKE2_Source_URL=https://github.com/rancher/rke2/releases/download \
-  RKE2_Version=v1.27.11 RKE2_Revision=rke2r1 \
+  RKE2_Version=v1.35.3 RKE2_Revision=rke2r3 \
   ./podman-prepare.sh rke2
+  ```
+
+  ### 準備 K3S，顯式指定版本與 revision 後綴（未來若上游出 k3s2 可直接覆寫）
+  ```
+  K3S_Version=v1.35.3 K3S_Revision=k3s1 \
+  ./podman-prepare.sh k3s
+  ```
+
+  ### 覆寫 K3S 來源 URL（從 Prime Artifacts 換回 GitHub releases）
+  ```
+  K3S_Source_URL=https://github.com/k3s-io/k3s/releases/download \
+  K3S_Version=v1.35.3 K3S_Revision=k3s1 \
+  ./podman-prepare.sh k3s
+  ```
+
+  ### 準備 Rancher，並指定非預設的 cert-manager 版本
+  ```
+  Rancher_Version=v2.13.4 Cert_Manager_Version=v1.20.2 \
+  ./podman-prepare.sh rancher
+  ```
+
+  ### 準備 Rancher，並指定特定 Helm 客戶端版本（會觸發 setup_env 的 Helm↔k8s n-3 相容性 pre-flight 檢查）
+  ```
+  Helm_Version=v3.20.2 Rancher_Version=v2.13.4 \
+  ./podman-prepare.sh rancher
   ```
 
 ## 範例目錄結構
