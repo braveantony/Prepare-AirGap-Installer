@@ -46,7 +46,7 @@ chmod +x *.sh
 螢幕輸出範例（image pull 過程會在**同一行**即時更新進度列，最終留下各產品完成訊息）：
 
 ```
-[cert-manager 11/11] quay.io/jetstack/cert-manager-ctl:v1.11.0
+[cert-manager 11/11] quay.io/jetstack/cert-manager-ctl:v1.20.2
 [rancher 127/127] rancher/mirrored-coredns-coredns:1.12.0
 [neuvector 8/8] neuvector/scanner:latest
 Prepare Harbor v2.15.0 OK.
@@ -122,7 +122,7 @@ Environment variables:
 
    - Cert_Manager_Version
      定義 Cert-manager 的版本
-     預設是 'v1.11.0'。
+     預設是 'v1.20.2'。
 
    - K3S_Version
      定義 K3S 的版本
@@ -200,7 +200,7 @@ Environment variables:
   ./podman-prepare.sh k3s
   ```
 
-  ### 準備 Rancher，並指定非預設的 cert-manager 版本
+  ### 準備 Rancher，並顯式指定 cert-manager 版本
   ```
   Rancher_Version=v2.13.4 Cert_Manager_Version=v1.20.2 \
   ./podman-prepare.sh rancher

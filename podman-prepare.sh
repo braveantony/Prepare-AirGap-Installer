@@ -62,7 +62,7 @@ Environment variables:
 
    - Cert_Manager_Version
      定義 Cert-manager 的版本
-     預設是 'v1.11.0'。
+     預設是 'v1.20.2'。
 
    - K3S_Version
      定義 K3S 的版本
@@ -175,7 +175,7 @@ setup_env() {
 
   # make sure the version of the Cert-Manager is defined
   if [[ -z "${Cert_Manager_Version}" ]]; then
-    Cert_Manager_Version="v1.11.0"
+    Cert_Manager_Version="v1.20.2"
   fi
 
   # make sure the version of the K3S is defined
