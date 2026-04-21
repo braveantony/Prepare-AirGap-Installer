@@ -244,12 +244,12 @@ prepare_harbor() {
   # 切換工作目錄
   cd ~/work/harbor/"${Harbor_Version}"
 
-  # 下載 Harbor 壓縮檔（-nv：non-verbose，避免 dots 進度條灌 log，保留 "saved to" 摘要）
-  logged_run "harbor: download offline-installer tgz" wget -nv https://github.com/goharbor/harbor/releases/download/"${Harbor_Version}"/harbor-offline-installer-"${Harbor_Version}".tgz
+  # 下載 Harbor 壓縮檔（-nv：non-verbose；-O：顯式覆寫同名檔，避免重跑時產生 *.1）
+  logged_run "harbor: download offline-installer tgz" wget -nv -O harbor-offline-installer-"${Harbor_Version}".tgz https://github.com/goharbor/harbor/releases/download/"${Harbor_Version}"/harbor-offline-installer-"${Harbor_Version}".tgz
   [[ "$?" != "0" ]] && echo "Download harbor-offline-installer-"${Harbor_Version}".tgz failed" && exit 1
 
-  # 下載 Docker Compose 套件
-  logged_run "harbor: download docker-compose" wget -nv https://github.com/docker/compose/releases/download/"${Docker_Compose_Version}"/docker-compose-linux-x86_64
+  # 下載 Docker Compose 套件（-O 同上原因）
+  logged_run "harbor: download docker-compose" wget -nv -O docker-compose-linux-x86_64 https://github.com/docker/compose/releases/download/"${Docker_Compose_Version}"/docker-compose-linux-x86_64
   [[ "$?" != "0" ]] && echo "Download docker-compose-linux-x86_64 "${Docker_Compose_Version}" failed" && exit 1
 
   # 將以上離線安裝 Harbor 所需之套件壓縮成一個檔案
@@ -372,9 +372,11 @@ prepare_rancher() {
   [[ "$?" != "0" ]] && echo "Download helm ${Helm_Version} failed"
 
   # 下載 Rancher Images List 文字檔及蒐集 Image 所需的 Shell Script
+  # -O "${x}"：顯式覆寫同名檔，避免重跑時產生 *.1；舊檔殘留會讓下游 sort -u
+  # 作用在錯的檔（變成前次的 image list），打包出錯到的 tarball
   for x in rancher-images.txt rancher-load-images.sh rancher-save-images.sh
   do
-    logged_run "rancher: download $x" wget -q "${Rancher_Source_URL}"/rancher/"${Rancher_Version}"/"${x}"
+    logged_run "rancher: download $x" wget -q -O "${x}" "${Rancher_Source_URL}"/rancher/"${Rancher_Version}"/"${x}"
     [[ "$?" != "0" ]] && echo "Download ${x} failed" && exit 1
   done
 
