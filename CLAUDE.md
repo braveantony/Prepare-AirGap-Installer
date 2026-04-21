@@ -56,12 +56,11 @@ Log：每一條執行的指令都會透過 `BASH_XTRACEFD` + `set -x` 寫進 `/t
 4. 對於以 Helm chart 形式發佈的產品（rancher、cert-manager、neuvector）：先 `helm template` 渲染 chart，用 grep 抓出 `image:` 行，逐一 pull，再 retag 為 `${Private_Registry_Name}/rancher/...`，最後以 `docker/podman save | gzip` 打包成單一的 `*.tar.gz`。
 5. `tar -czf ~/work/compressed_files/<product>-airgap-<version>.tar.gz <product>/<version>`。
 
-**Dispatch。** 檔案尾端的 `while`／`case` 迴圈把每個位置參數導向 `create_working_directory` + `prepare_<x>`。注意 `all` **只會**跑 harbor + rke2 + rancher（不含 k3s／neuvector），而且執行完會 `exit 0`——它不會跟同一行上其他的參數串接執行。
+**Dispatch。** 檔案尾端的 `while`／`case` 迴圈把每個位置參數導向 `create_working_directory` + `prepare_<x>`，所有呼叫都透過 `run_step` helper：它把 stdout/stderr tee 到 `Command_Output_log_file`，並用 `PIPESTATUS[0]` 取 pipeline 第一段的 exit code，確保 function 內 `exit N` 能正確終止整支腳本（避免 pipeline subshell 吞掉 exit code）。`all` 會依序跑所有五個產品（harbor → rke2 → rancher → k3s → neuvector）後 `exit 0`，**不會**再回到 dispatch loop 處理同一行其餘參數。
 
 **setup_env 的預設值。** 預設版本同時寫在 `setup_env` 內，也重複寫在 `usage` 的 heredoc 裡。想改某個預設版本，代表兩支腳本、各兩處，總共要改**四個地方**。
 
 ## 已知的粗糙之處（不要無腦「修」）
 
-- `prepare.sh` 大約第 320 行：`"{K3S_Version}"` 漏了開頭的 `$`。這是 docker 腳本裡真實存在的 bug；`podman-prepare.sh` 這行是對的。
-- 有多處錯誤檢查寫成：在一條 pipeline 的**下一行**用 `[[ "$?" != "0" ]] && echo ... && exit 1`——但 `$?` 只反映 pipeline 最後一個指令的狀態，無法捕捉前段指令的失敗。除非使用者明確要求強化錯誤處理，否則保留現狀。
+- `prepare_*` 函式內部仍有若干 `[[ "$?" != "0" ]] && echo ... && exit 1` 寫在一條 pipeline 的**下一行**——`$?` 只反映 pipeline 最後一個指令的狀態（例：`... | gzip > file.tar.gz` 成功但前段 `helm template` 或 `docker save` 失敗會被吞）。dispatch 層已透過 `run_step` + `PIPESTATUS[0]` 守住；內部這些檢查除非使用者明確要求強化，否則保留。
 - 程式碼註解與使用者面向的訊息都是繁體中文，編修時請沿用這個慣例。
