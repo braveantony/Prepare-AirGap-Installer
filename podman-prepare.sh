@@ -5,6 +5,7 @@
 [[ -z "${Command_log_file}" ]] && Command_log_file="/tmp/prepare_message.log"
 [[ -f "${Command_log_file}" ]] && sudo rm "${Command_log_file}"
 exec {BASH_XTRACEFD}>>"${Command_log_file}"
+export PS4='+ [$(date +%H:%M:%S)] ${BASH_SOURCE##*/}:${LINENO}: '
 set -x
 
 ## 預設確保命令執行後的輸出重定向到 /tmp/prepare_output_message.log 檔案中
@@ -192,6 +193,38 @@ run_step() {
   local rc=${PIPESTATUS[0]}
   [[ $rc -ne 0 ]] && exit $rc
   return 0
+}
+
+# 在合併 log 檔寫一個醒目的 section 分隔符，用來標記 prepare_* 函式的進入與結束
+log_section() {
+  local label="$1"
+  local ts; ts=$(date '+%Y-%m-%d %H:%M:%S')
+  {
+    echo ""
+    echo "############################################################"
+    echo "# [$ts] $label"
+    echo "############################################################"
+    echo ""
+  } >> "${Command_Output_log_file}"
+}
+
+# 執行外部命令並把 CMD／輸出／EXIT 一起結構化寫入合併 log 檔（不上螢幕）。
+# 使用：logged_run "<label>" <cmd> <args...>
+# 回傳值為原命令的 exit code，呼叫端既有 `[[ "$?" != "0" ]] && echo ... && exit 1` 仍適用。
+logged_run() {
+  local label="$1"; shift
+  local log="${Command_Output_log_file}"
+  local ts_start; ts_start=$(date '+%Y-%m-%d %H:%M:%S')
+  {
+    echo ""
+    echo "=== [$ts_start] $label ==="
+    echo "CMD: $*"
+  } >> "$log"
+  "$@" >> "$log" 2>&1
+  local rc=$?
+  local ts_end; ts_end=$(date '+%Y-%m-%d %H:%M:%S')
+  echo "=== [$ts_end] EXIT: $rc ===" >> "$log"
+  return $rc
 }
 
 # 建立工作目錄
