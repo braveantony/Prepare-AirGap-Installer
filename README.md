@@ -144,6 +144,12 @@ Environment variables:
      定義企業內部私有 Image Registry 的名稱
      預設是 'harbor.example.com'。
 
+   - Private_Registry_Namespace
+     定義企業內部私有 Image Registry 下的第二層 namespace／project 名稱
+     （retag 成 <Private_Registry_Name>/<Private_Registry_Namespace>/<image>）
+     預設是 'rancher'（例：harbor.example.com/rancher/...）。
+     Rancher Prime 離線環境常設為 'rancher-prime'。
+
    - Command_log_file
      將執行的命令重新導向到 /tmp/prepare_message.log
      預設是 '/tmp/prepare_message.log'。
@@ -203,6 +209,13 @@ Environment variables:
   ### 準備 Rancher，並指定特定 Helm 客戶端版本（會觸發 setup_env 的 Helm↔k8s n-3 相容性 pre-flight 檢查）
   ```
   Helm_Version=v3.20.2 Rancher_Version=v2.13.4 \
+  ./podman-prepare.sh rancher
+  ```
+
+  ### 把 image retag 到 Harbor 的 `rancher-prime` project（而非預設的 `rancher`）
+  ```
+  Private_Registry_Name=harbor.example.com \
+  Private_Registry_Namespace=rancher-prime \
   ./podman-prepare.sh rancher
   ```
 

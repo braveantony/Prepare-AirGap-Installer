@@ -84,6 +84,12 @@ Environment variables:
      定義企業內部私有 Image Registry 的名稱
      預設是 'harbor.example.com'。
 
+   - Private_Registry_Namespace
+     定義企業內部私有 Image Registry 下的第二層 namespace／project 名稱
+     （retag 成 <Private_Registry_Name>/<Private_Registry_Namespace>/<image>）
+     預設是 'rancher'（例：harbor.example.com/rancher/...）。
+     Rancher Prime 離線環境常設為 'rancher-prime'。
+
    - Command_log_file
      將執行的命令重新導向到 /tmp/prepare_message.log
      預設是 '/tmp/prepare_message.log'。
@@ -195,6 +201,11 @@ setup_env() {
   # make sure the name of the Private Images Registry is defined
   if [[ -z "${Private_Registry_Name}" ]]; then
     Private_Registry_Name="harbor.example.com"
+  fi
+
+  # make sure the namespace/project under the Private Images Registry is defined
+  if [[ -z "${Private_Registry_Namespace}" ]]; then
+    Private_Registry_Namespace="rancher"
   fi
 
   # Helm 與 k8s n-3 相容性 pre-flight check；fail 時 exit 以避免打包出無法用的 airgap 包
@@ -429,15 +440,15 @@ prepare_rancher() {
     [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull quay.io/jetstack/$image Container images failed"; exit 1; }
 
     # 修改 cert-manager 的所有 Container Images Tag
-    logged_run "cert-manager [$idx/$cert_manager_total] tag $image" podman tag "${image}" "${Private_Registry_Name}"/rancher/"${image##*/}"
-    [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "tag ${Private_Registry_Name}/rancher/${image##*/} Container images failed"; exit 1; }
+    logged_run "cert-manager [$idx/$cert_manager_total] tag $image" podman tag "${image}" "${Private_Registry_Name}"/"${Private_Registry_Namespace}"/"${image##*/}"
+    [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "tag ${Private_Registry_Name}/${Private_Registry_Namespace}/${image##*/} Container images failed"; exit 1; }
   done
   printf "\n" >/dev/tty 2>/dev/null || true
 
   # 將 cert-manager 的所有 Container Images 打包成 .tar.gz 壓縮檔
   # 復用前面計算好的 $cert_manager_images，避免重新跑一次 helm template
   # pipe 用 bash -c 包，set -o pipefail 讓 save 或 gzip 任一段失敗都能正確回傳
-  cert_manager_renamed_images=$(echo "$cert_manager_images" | sed "s|quay.io/jetstack|${Private_Registry_Name}/rancher|g" | tr '\n' ' ')
+  cert_manager_renamed_images=$(echo "$cert_manager_images" | sed "s|quay.io/jetstack|${Private_Registry_Name}/${Private_Registry_Namespace}|g" | tr '\n' ' ')
   logged_run "cert-manager: save images tar.gz" bash -c "set -o pipefail; podman save -m ${cert_manager_renamed_images} | gzip --stdout > cert-manager-image-${Cert_Manager_Version}.tar.gz"
   [[ "$?" != "0" ]] && echo "Podman save Cert-manager ${Cert_Manager_Version} images failed" && exit 1
 
@@ -480,13 +491,15 @@ prepare_rancher() {
         echo pull "$n" failed twice && exit 1
       fi
     else
-      logged_run "rancher retry tag $n" podman tag "${n}" "${Private_Registry_Name}"/rancher/"${n##*/}"
-      [[ "$?" != "0" ]] && echo "tag ${Private_Registry_Name}/rancher/${n##*/} Container images failed" && exit 1
+      logged_run "rancher retry tag $n" podman tag "${n}" "${Private_Registry_Name}"/"${Private_Registry_Namespace}"/"${n##*/}"
+      [[ "$?" != "0" ]] && echo "tag ${Private_Registry_Name}/${Private_Registry_Namespace}/${n##*/} Container images failed" && exit 1
     fi
   done
 
   # save 為 pipe，用 bash -c + pipefail 包進 logged_run
-  rename_rancher_all_image=$(cat rancher-images.txt | sed "s|^|${Private_Registry_Name}/|" | tr '\n' ' ')
+  # 把 rancher-images.txt 中以 'rancher/' 開頭的項目改寫成 <registry>/<namespace>/；
+  # 預設 Private_Registry_Namespace=rancher 時等價於原「prepend ${registry}/」行為
+  rename_rancher_all_image=$(cat rancher-images.txt | sed "s|^rancher/|${Private_Registry_Name}/${Private_Registry_Namespace}/|" | tr '\n' ' ')
   logged_run "rancher: save images tar.gz" bash -c "set -o pipefail; podman save -m ${rename_rancher_all_image} | gzip --stdout > rancher-${Rancher_Version}-image.tar.gz"
   [[ (( $(stat -c%s rancher-"${Rancher_Version}"-image.tar.gz) -lt 50000000 )) ]] && echo "Podman Save rancher ${Rancher_Version} images failed" && exit 1
 
