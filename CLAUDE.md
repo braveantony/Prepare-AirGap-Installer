@@ -30,13 +30,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 專案目的
 
-本專案包含兩支幾乎完全相同的 Bash 腳本，用於打包 Harbor、RKE2、Rancher（Prime）、K3S 與 Neuvector 的全離線（air-gap）安裝包。每次執行會下載該產品的 release 檔案，並把所需的 container images 全部拉下來，最後用 tar + gzip 壓縮成 `~/work/compressed_files/<product>-airgap-<version>.tar.gz`。
+本專案包含兩類腳本：
+
+1. **連線端打包**（`prepare.sh`／`podman-prepare.sh`）：兩支幾乎完全相同的 Bash 腳本，用於打包 Harbor、RKE2、Rancher（Prime）、K3S 與 Neuvector 的全離線（air-gap）安裝包。每次執行會下載該產品的 release 檔案，並把所需的 container images 全部拉下來，最後用 tar + gzip 壓縮成 `~/work/compressed_files/<product>-airgap-<version>.tar.gz`。
+
+2. **離線端匯入**（`rancher-import.sh`）：在無法對外連網的環境中，把準備好的 Rancher image tar.gz `podman load` 進本地 runtime、retag、再 push 到內部 registry。**只**處理 image 的 load + retag + push，解壓 airgap tarball 與 helm chart／YAML 的後續使用由使用者自理。
 
 ## 執行方式
 
 ```bash
+# 連線端（需要可連外網）
 ./prepare.sh        <target>...   # 使用 docker（需可免密碼 sudo）
 ./podman-prepare.sh <target>...   # 使用 rootless podman
+
+# 離線端（只做 rancher）
+./rancher-import.sh <image-tar.gz> [<image-tar.gz> ...]
 ```
 
 可用的 target：`all` | `harbor` | `rke2` | `rancher` | `neuvector` | `k3s`。不帶參數時會印出 usage。
@@ -59,6 +67,18 @@ Log：每一條執行的指令都會透過 `BASH_XTRACEFD` + `set -x` 寫進 `/t
 **Dispatch。** 檔案尾端的 `while`／`case` 迴圈把每個位置參數導向 `create_working_directory` + `prepare_<x>`，所有呼叫都透過 `run_step` helper：它把 stdout/stderr tee 到 `Command_Output_log_file`，並用 `PIPESTATUS[0]` 取 pipeline 第一段的 exit code，確保 function 內 `exit N` 能正確終止整支腳本（避免 pipeline subshell 吞掉 exit code）。`all` 會依序跑所有五個產品（harbor → rke2 → rancher → k3s → neuvector）後 `exit 0`，**不會**再回到 dispatch loop 處理同一行其餘參數。
 
 **setup_env 的預設值。** 預設版本同時寫在 `setup_env` 內，也重複寫在 `usage` 的 heredoc 裡。想改某個預設版本，代表兩支腳本、各兩處，總共要改**四個地方**。
+
+### `rancher-import.sh`（離線端匯入，單獨一支）
+
+與兩支 prepare 腳本解耦，目的是**離線端可以單獨分發**，不需要一起搬整個 repo。職責刻意切窄：
+
+- **只處理 image**：位置參數吃 `*-image.tar.gz`（可一到多個，支援 shell glob），對每個 tarball 做 `podman/docker load`、把 `Loaded image: <ref>` 解析出來、retag、push。
+- **不碰使用者檔案**：不解壓 `rancher-airgap-<ver>.tar.gz`、不搬移 helm chart／YAML、不清理輸入檔。使用者要自己 `tar -xzf` 解壓並管理解壓後的 config 檔（後續 `helm install rancher`／`kubectl apply -f cert-manager.yaml` 會用到）。
+- **Runtime 泛用**：`Container_Runtime` env var 切 podman／docker（預設 podman）；不像 prepare 端為兩種 runtime 各寫一支。
+- **Retag 自動化**：從 image tag 解析 `<src_registry>/<src_namespace>/<rest...>`，若 `src_registry`／`src_namespace` 已對齊 `Target_Registry_Name`／`Target_Registry_Namespace` 則 skip，否則 retag 為 `${Target_Registry_Name}/${Target_Registry_Namespace}/${rest}`。
+- **Helper 重複（刻意）**：複製了 `print_progress`／`log_section`／`logged_run` 的實作約 60 行。不抽 common library 是為了 script 可單獨 scp 到離線機器執行。未來若 harbor／rke2／k3s／neuvector 也要做 import 端，屆時再評估是否抽 library。
+- **Log 檔分開**：`/tmp/import_message.log`（xtrace）與 `/tmp/import_output_message.log`（合併結構化），與 prepare 端的 `/tmp/prepare_*.log` 分離避免混淆。
+- **password-stdin**：若給 `Registry_Username` + `Registry_Password`，login 前後會暫關 `set +x`／再開 `set -x`，避免密碼進 xtrace log。
 
 ## 已知的粗糙之處（不要無腦「修」）
 

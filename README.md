@@ -240,6 +240,111 @@ Environment variables:
     └── v1.35.3
 ```
 
+## 離線端匯入 Rancher
+
+以上 `prepare.sh`／`podman-prepare.sh` 是**連線端**（可連外網）準備 airgap 包的流程。離線端拿到 `rancher-airgap-<ver>.tar.gz` 後的還原流程由 `rancher-import.sh` 負責，它只做 **load + retag + push**：
+
+```
+┌─────────────────┐              ┌──────────────────────────┐
+│  連線端（有網） │   transfer   │  離線端（air-gap）       │
+│  prepare.sh     │ ───────────▶ │  rancher-import.sh       │
+│  打包 tarball   │   by USB／   │  load + retag + push     │
+│                 │   SCP／etc.  │  到內部 registry         │
+└─────────────────┘              └──────────────────────────┘
+```
+
+### 職責邊界
+
+| 步驟 | 誰做 |
+|---|---|
+| `tar -xzf rancher-airgap-<ver>.tar.gz` | **使用者手動**（想解到哪就解到哪） |
+| 管理解壓後的 helm chart (`.tgz`)／`cert-manager.yaml`／helper scripts | **使用者手動**（保留供 `helm install`／`kubectl apply` 用） |
+| `podman load -i <image-tar.gz>` | **`rancher-import.sh`** |
+| 解析 loaded image 做 retag | **`rancher-import.sh`** |
+| `podman login` ／ `podman push` | **`rancher-import.sh`** |
+
+Script 只讀入 image tar.gz 做 registry 匯入，不碰使用者的解壓目錄結構。
+
+### Usage
+
+```
+Usage:
+  ENV_VAR=... rancher-import.sh <image-tar.gz> [<image-tar.gz> ...]
+
+Required:
+   - Positional args：一或多個 image tar.gz 檔路徑
+       例：~/work/imported/rancher/v2.13.4/rancher-v2.13.4-image.tar.gz
+           ~/work/imported/rancher/v2.13.4/cert-manager-image-v1.20.2.tar.gz
+
+   - Target_Registry_Name
+     目標私有 Image Registry 的 hostname（必填）
+     例：harbor.customer.internal
+
+Optional environment variables:
+   - Container_Runtime          (default: podman；可 podman 或 docker)
+   - Target_Registry_Namespace  (default: rancher；第二層 namespace／project)
+   - Registry_Username          (optional；搭配 Registry_Password 走 --password-stdin)
+   - Registry_Password          (optional)
+   - Skip_Login                 (default: 0；設 1 跳過 login)
+   - Command_log_file           (default: /tmp/import_message.log)
+   - Command_Output_log_file    (default: /tmp/import_output_message.log)
+```
+
+### 典型三步驟工作流
+
+```bash
+# Step 1: 使用者自行解壓（想解到哪就解到哪；這裡示範 ~/work/imported/）
+mkdir -p ~/work/imported/rancher/v2.13.4
+tar -xzf ~/work/compressed_files/rancher-airgap-v2.13.4.tar.gz \
+  -C ~/work/imported/rancher/v2.13.4 --strip-components=2
+
+# Step 2: Script 處理 image（shell glob 最簡潔）
+Target_Registry_Name=harbor.customer.internal \
+  ./rancher-import.sh ~/work/imported/rancher/v2.13.4/*-image.tar.gz
+
+# Step 3: 使用者用保留下來的 helm chart／yaml 裝 cert-manager 與 Rancher
+cd ~/work/imported/rancher/v2.13.4
+kubectl apply -f cert-manager-crd.yaml
+helm install cert-manager ./cert-manager-v1.20.2.tgz -n cert-manager --create-namespace
+helm install rancher ./rancher-2.13.4.tgz -n cattle-system --create-namespace \
+  --set hostname=rancher.example.com \
+  --set rancherImage=harbor.customer.internal/rancher/rancher
+```
+
+### Import Examples
+
+```bash
+# 顯式指定多個檔案，並指定 Target_Registry_Namespace=rancher-prime
+Target_Registry_Name=harbor.customer.internal \
+Target_Registry_Namespace=rancher-prime \
+./rancher-import.sh \
+  ~/work/imported/rancher/v2.13.4/rancher-v2.13.4-image.tar.gz \
+  ~/work/imported/rancher/v2.13.4/cert-manager-image-v1.20.2.tar.gz
+
+# 非互動登入（CI pipeline）
+Target_Registry_Name=harbor.customer.internal \
+Registry_Username=admin Registry_Password='...' \
+./rancher-import.sh /path/to/*-image.tar.gz
+
+# 使用 docker 而非 podman
+Container_Runtime=docker Target_Registry_Name=harbor.x.com \
+./rancher-import.sh /path/to/*-image.tar.gz
+
+# 已經 login 過，跳過 login 步驟
+Skip_Login=1 Target_Registry_Name=harbor.x.com \
+./rancher-import.sh /path/to/*-image.tar.gz
+```
+
+### Retag 邏輯
+
+Script 從 image tag 自動解析 source：`<src_registry>/<src_namespace>/<rest...>`，若 `src_registry`／`src_namespace` 皆等於 `Target_Registry_Name`／`Target_Registry_Namespace` 則 **skip retag**；否則 retag 為 `${Target_Registry_Name}/${Target_Registry_Namespace}/${rest}`。範例：
+
+| Loaded image | Target_Registry_Name / Namespace | 行為 |
+|---|---|---|
+| `harbor.example.com/rancher/rancher:v2.13.4` | `harbor.example.com` / `rancher` | **skip retag**（已對齊） |
+| `harbor.example.com/rancher/rancher:v2.13.4` | `harbor.customer.internal` / `rancher` | retag → `harbor.customer.internal/rancher/rancher:v2.13.4` |
+| `harbor.example.com/rancher/rancher:v2.13.4` | `harbor.example.com` / `rancher-prime` | retag → `harbor.example.com/rancher-prime/rancher:v2.13.4` |
+
 ## Log
 
 執行期間兩個 log 檔分工：
