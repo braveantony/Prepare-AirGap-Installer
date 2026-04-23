@@ -98,6 +98,11 @@ Environment variables:
      將命令執行後的輸出重新導向到 /tmp/prepare_output_message.log
      預設是 '/tmp/prepare_output_message.log'。
 
+   - Container_Runtime
+     選擇 container runtime，可設為 'docker' 或 'podman'
+     預設 auto-detect（優先 'podman'；若 podman 不可用則 'docker'）
+     設為 'docker' 時會使用 'sudo docker'（需可免密碼 sudo）
+
 Example:
   ## 一次準備 Harbor、RKE2、Rancher、K3S、Neuvector 的全離線安裝包，並且指定安裝 Harbor 特定版本
   \$ Harbor_Version=v2.7.0 ./prepare.sh all
@@ -112,6 +117,9 @@ Example:
   \$ Rancher_Version=v2.7.9 Harbor_Version=v2.7.0 K3S_Version=v1.25.9 \\
   Private_Registry_Name="antony-harbor.example.com" \\
   ./prepare.sh rancher harbor k3s
+
+  ## 顯式使用 docker 而非 auto-detect（需可免密碼 sudo）
+  \$ Container_Runtime=docker Rancher_Version=v2.13.4 ./prepare.sh rancher
 EOF
   exit
 }
@@ -125,8 +133,28 @@ setup_env() {
     echo "internet connection is offline" && exit 1
   fi
 
+  # Container_Runtime 分派：未設定時 auto-detect（優先 podman；fallback docker）
+  if [[ -z "${Container_Runtime}" ]]; then
+    if command -v podman &>/dev/null; then
+      Container_Runtime="podman"
+    elif command -v docker &>/dev/null; then
+      Container_Runtime="docker"
+    else
+      echo "neither podman nor docker found; set Container_Runtime explicitly" >&2
+      exit 1
+    fi
+  fi
+  case "${Container_Runtime}" in
+    docker|podman) ;;
+    *) echo "Container_Runtime must be 'docker' or 'podman', got: '${Container_Runtime}'" >&2; exit 1 ;;
+  esac
+  if ! command -v "${Container_Runtime}" &>/dev/null; then
+    echo "${Container_Runtime} command not found!" >&2
+    exit 1
+  fi
+
   # check Command is installed
-  for command in wget curl docker helm
+  for command in wget curl helm
   do
     if ! which $command &> /dev/null; then
       echo "${command} command not found!" && exit 1
@@ -218,6 +246,21 @@ setup_env() {
 # 印進度列到終端（同一行覆寫），非 TTY 時靜默
 print_progress() {
   printf "\r\033[K[%s %d/%d] %s" "$1" "$2" "$3" "$4" >/dev/tty 2>/dev/null || true
+}
+
+# Runtime CLI prefix wrapper：docker 需要 sudo（rootful），podman 走 rootless
+# 使用：$(cr_cmd) pull foo、$(cr_cmd) tag a b
+cr_cmd() {
+  if [[ "${Container_Runtime}" == "docker" ]]; then
+    echo "sudo docker"
+  else
+    echo "podman"
+  fi
+}
+
+# save 的 multi-image flag：podman 需要 -m（manifest list），docker 原生多 arg 不需要
+cr_save_flags() {
+  [[ "${Container_Runtime}" == "podman" ]] && echo "-m"
 }
 
 # 呼叫 function/command 並把 stdout/stderr 導入 log 檔；若呼叫者非零結束，
@@ -435,11 +478,11 @@ prepare_rancher() {
     print_progress "cert-manager" "$idx" "$cert_manager_total" "$image"
 
     # 下載 cert-manager 的 Container Images
-    logged_run "cert-manager [$idx/$cert_manager_total] pull $image" sudo docker pull "$image"
+    logged_run "cert-manager [$idx/$cert_manager_total] pull $image" $(cr_cmd) pull "$image"
     [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull $image failed"; exit 1; }
 
     # 修改 cert-manager 的所有 Container Images Tag
-    logged_run "cert-manager [$idx/$cert_manager_total] tag $image" sudo docker tag "${image}" "${Private_Registry_Name}"/"${Private_Registry_Namespace}"/"${image##*/}"
+    logged_run "cert-manager [$idx/$cert_manager_total] tag $image" $(cr_cmd) tag "${image}" "${Private_Registry_Name}"/"${Private_Registry_Namespace}"/"${image##*/}"
     [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "tag ${Private_Registry_Name}/${Private_Registry_Namespace}/${image##*/} Container images failed"; exit 1; }
   done
   printf "\n" >/dev/tty 2>/dev/null || true
@@ -448,8 +491,8 @@ prepare_rancher() {
   # 復用前面計算好的 $cert_manager_images，避免重新跑一次 helm template
   # pipe 用 bash -c 包，set -o pipefail 讓 save 或 gzip 任一段失敗都能正確回傳
   cert_manager_renamed_images=$(echo "$cert_manager_images" | sed "s|quay.io/jetstack|${Private_Registry_Name}/${Private_Registry_Namespace}|g" | tr '\n' ' ')
-  logged_run "cert-manager: save images tar.gz" bash -c "set -o pipefail; sudo docker save ${cert_manager_renamed_images} | gzip --stdout > cert-manager-image-${Cert_Manager_Version}.tar.gz"
-  [[ "$?" != "0" ]] && echo "Docker save Cert-manager ${Cert_Manager_Version} images failed" && exit 1
+  logged_run "cert-manager: save images tar.gz" bash -c "set -o pipefail; $(cr_cmd) save $(cr_save_flags) ${cert_manager_renamed_images} | gzip --stdout > cert-manager-image-${Cert_Manager_Version}.tar.gz"
+  [[ "$?" != "0" ]] && echo "${Container_Runtime} save Cert-manager ${Cert_Manager_Version} images failed" && exit 1
 
   # 下載 Helm 壓縮檔
   logged_run "rancher: download helm ${Helm_Version} tarball" wget -q https://get.helm.sh/helm-"${Helm_Version}"-linux-amd64.tar.gz -O helm-"${Helm_Version}"-linux-amd64.tar.gz
@@ -485,7 +528,7 @@ prepare_rancher() {
   do
     idx=$((idx + 1))
     print_progress "rancher" "$idx" "$rancher_total" "$image"
-    if ! logged_run "rancher [$idx/$rancher_total] pull $image" sudo docker pull registry.rancher.com/"${image}"; then
+    if ! logged_run "rancher [$idx/$rancher_total] pull $image" $(cr_cmd) pull registry.rancher.com/"${image}"; then
       printf "\n" >/dev/tty 2>/dev/null || true
       echo pull "$image" failed && exit 1
     fi
@@ -494,12 +537,12 @@ prepare_rancher() {
 
   # 主 pull loop 已保證所有 image 都 pull 成功（任一失敗即 exit），此處只負責 retag；
   # 用 ${image#rancher/} 對齊下方 save 時的 sed 改寫規則（保留多層路徑），避免 single-level
-  # ${n##*/} 與 multi-level sed 對不上導致 docker save 找不到 tag 的 latent bug。
+  # ${n##*/} 與 multi-level sed 對不上導致 container runtime save 找不到 tag 的 latent bug。
   while IFS= read -r image || [[ -n "$image" ]]
   do
     src="registry.rancher.com/${image}"
     dst="${Private_Registry_Name}/${Private_Registry_Namespace}/${image#rancher/}"
-    logged_run "rancher tag $image" sudo docker tag "$src" "$dst"
+    logged_run "rancher tag $image" $(cr_cmd) tag "$src" "$dst"
     [[ "$?" != "0" ]] && echo "tag $dst failed" && exit 1
   done < rancher-images.txt
 
@@ -507,8 +550,8 @@ prepare_rancher() {
   # 把 rancher-images.txt 中以 'rancher/' 開頭的項目改寫成 <registry>/<namespace>/；
   # 預設 Private_Registry_Namespace=rancher 時等價於原「prepend ${registry}/」行為
   rename_rancher_all_image=$(cat rancher-images.txt | sed "s|^rancher/|${Private_Registry_Name}/${Private_Registry_Namespace}/|" | tr '\n' ' ')
-  logged_run "rancher: save images tar.gz" bash -c "set -o pipefail; sudo docker save ${rename_rancher_all_image} | gzip --stdout > rancher-${Rancher_Version}-image.tar.gz"
-  [[ (( $(stat -c%s rancher-"${Rancher_Version}"-image.tar.gz) -lt 50000000 )) ]] && echo "Docker Save rancher ${Rancher_Version} images failed" && exit 1
+  logged_run "rancher: save images tar.gz" bash -c "set -o pipefail; $(cr_cmd) save $(cr_save_flags) ${rename_rancher_all_image} | gzip --stdout > rancher-${Rancher_Version}-image.tar.gz"
+  [[ (( $(stat -c%s rancher-"${Rancher_Version}"-image.tar.gz) -lt 50000000 )) ]] && echo "${Container_Runtime} save rancher ${Rancher_Version} images failed" && exit 1
 
   cd ../..
   logged_run "rancher: tar airgap bundle" tar -czf compressed_files/rancher-airgap-"${Rancher_Version}".tar.gz rancher/"${Rancher_Version}"
@@ -589,15 +632,15 @@ prepare_neuvector() {
   do
     idx=$((idx + 1))
     print_progress "neuvector" "$idx" "$neuvector_total" "$image"
-    logged_run "neuvector [$idx/$neuvector_total] pull $image" sudo docker pull "$image"
+    logged_run "neuvector [$idx/$neuvector_total] pull $image" $(cr_cmd) pull "$image"
     [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull $image failed"; exit 1; }
   done < images-list.txt
   printf "\n" >/dev/tty 2>/dev/null || true
 
   # save images to tar.gz（pipe 用 bash -c + pipefail 包）
   neuvector_all_images=$(tr '\n' ' ' < images-list.txt)
-  logged_run "neuvector: save images tar.gz" bash -c "set -o pipefail; sudo docker save ${neuvector_all_images} | gzip --stdout > neuvector-images-${Neuvector_Version}.tar.gz"
-  [[ "$?" != "0" ]] && echo "Docker save Neuvector images ${Neuvector_Version} failed" && exit 1
+  logged_run "neuvector: save images tar.gz" bash -c "set -o pipefail; $(cr_cmd) save $(cr_save_flags) ${neuvector_all_images} | gzip --stdout > neuvector-images-${Neuvector_Version}.tar.gz"
+  [[ "$?" != "0" ]] && echo "${Container_Runtime} save Neuvector images ${Neuvector_Version} failed" && exit 1
 
   cd ../..
   logged_run "neuvector: tar airgap bundle" tar -czf compressed_files/neuvector-airgap-"${Neuvector_Version}".tar.gz neuvector/"${Neuvector_Version}"
