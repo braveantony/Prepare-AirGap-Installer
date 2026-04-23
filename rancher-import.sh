@@ -128,15 +128,26 @@ setup_env() {
   fi
 
   # 驗證 runtime binary 存在
-  if ! which "${Container_Runtime}" &> /dev/null; then
+  # 用 bash builtin `command -v`（POSIX）而非 `which`，後者在不同 distro／busybox
+  # 行為不一致、且有些最小容器映像不含。
+  if ! command -v "${Container_Runtime}" &> /dev/null; then
     echo "${Container_Runtime} command not found!" >&2
     exit 1
   fi
 
-  # Target_Registry_Name 必填
+  # Target_Registry_Name 必填，且不得含 scheme／trailing slash（否則 podman tag 會失敗
+  # 且錯誤訊息不直觀；在這裡先 fail-fast 給使用者清楚的修正提示）
   if [[ -z "${Target_Registry_Name}" ]]; then
     echo "Target_Registry_Name is required" >&2
     usage
+  fi
+  if [[ "${Target_Registry_Name}" =~ ^https?:// ]]; then
+    echo "Target_Registry_Name 不可包含 scheme（https://／http://）；請改填純 hostname，例：harbor.customer.internal" >&2
+    exit 1
+  fi
+  if [[ "${Target_Registry_Name}" == */ ]]; then
+    echo "Target_Registry_Name 不可以 '/' 結尾；請改填純 hostname，例：harbor.customer.internal" >&2
+    exit 1
   fi
 
   # Target_Registry_Namespace 預設 rancher（對齊 prepare 端 Private_Registry_Namespace）
@@ -148,6 +159,23 @@ setup_env() {
   if [[ -z "${Skip_Login}" ]]; then
     Skip_Login="0"
   fi
+
+  # Registry_Username／Registry_Password 半給的情境（只給其一）幾乎必然是使用者失誤；
+  # 若放任 fall through 到互動模式會讓使用者誤以為 CI 非互動路徑生效、卻其實卡在
+  # prompt 等 stdin。直接 fail-fast 讓錯誤訊息明確。
+  # 測 Password 存在性會被 set -x 展開成密碼值寫進 xtrace；關 xtrace 測完再開。
+  set +x
+  if [[ -n "${Registry_Username}" && -z "${Registry_Password}" ]]; then
+    set -x
+    echo "Registry_Username is set but Registry_Password is empty. Provide both or neither." >&2
+    exit 1
+  fi
+  if [[ -z "${Registry_Username}" && -n "${Registry_Password}" ]]; then
+    set -x
+    echo "Registry_Password is set but Registry_Username is empty. Provide both or neither." >&2
+    exit 1
+  fi
+  set -x
 
   # 先驗證所有位置參數指向的檔案存在且可讀，避免做了一半才報錯
   for tarball in "$@"; do
@@ -204,7 +232,24 @@ do_login() {
     set -x
     # 互動：直接跑，讓 runtime 自己 prompt（stdin/stderr 不導開）
     echo "Login to ${Target_Registry_Name} (interactive prompt)..."
-    if ! "${Container_Runtime}" login "${Target_Registry_Name}"; then
+
+    # 互動模式無法像非互動分支那樣 redirect stdout/stderr 進 log（會讓 prompt 看不到）；
+    # 仍然寫 start/exit 標記維持 log 結構一致性。
+    local ts_start; ts_start=$(date '+%Y-%m-%d %H:%M:%S')
+    {
+      echo ""
+      echo "=== [$ts_start] import: login ${Target_Registry_Name} (interactive) ==="
+      echo "CMD: ${Container_Runtime} login ${Target_Registry_Name}"
+      echo "(互動模式，stdout/stderr 不導入 log 以免吞掉 prompt)"
+    } >> "${Command_Output_log_file}"
+
+    "${Container_Runtime}" login "${Target_Registry_Name}"
+    local login_rc=$?
+
+    local ts_end; ts_end=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "=== [$ts_end] EXIT: $login_rc ===" >> "${Command_Output_log_file}"
+
+    if [[ $login_rc -ne 0 ]]; then
       echo "Login to ${Target_Registry_Name} failed" >&2
       exit 1
     fi
@@ -212,6 +257,9 @@ do_login() {
 }
 
 # 依序 load 所有 image tarball，並把 `Loaded image: <ref>` 解析到 loaded_images 陣列
+#
+# 注意：loaded_images 是**刻意宣告為 global**（無 local），供 retag_and_push 讀取。
+# 請勿加 `local` 否則會破壞跨函式的 state 傳遞。若要改為參數傳遞需同步修改兩個函式。
 load_all_images() {
   loaded_images=()
   local tarball_count=$#
@@ -244,13 +292,46 @@ load_all_images() {
     fi
 
     # 解析 `Loaded image: <ref>`（podman / docker 輸出格式一致）
+    local before_count=${#loaded_images[@]}
     local line
     while IFS= read -r line; do
       [[ -n "$line" ]] && loaded_images+=( "$line" )
     done < <(awk -F': ' '/^Loaded image:/ {print $2}' "${tmp_out}")
+    local after_count=${#loaded_images[@]}
 
     rm -f "${tmp_out}"
+
+    # 個別 tarball 沒有帶出任何 image 時警告（使用者很可能誤傳 helm chart tgz
+    # 或配置檔等非 image tarball）。不阻擋流程，讓後續 tarball 繼續 load；
+    # 若所有 tarball 加總仍為 0 則最後統一 exit 1。
+    if [[ $after_count -eq $before_count ]]; then
+      echo "Warning: ${tarball} 未帶出任何 'Loaded image:' 條目（可能不是 image tar.gz）" >&2
+    fi
   done
+
+  # 去重：同一個 image ref 若出現在多個 tarball（或同一 tarball 被傳了兩次），
+  # retag/push 會做冗餘工作與錯誤計數；用 awk '!seen[$0]++' 保留首見順序做 dedup。
+  # awk 失敗極罕見（理論上只有 OOM 才可能），但為了 defensive 檢查 PIPESTATUS。
+  if [[ ${#loaded_images[@]} -gt 0 ]]; then
+    local dedup_out
+    dedup_out=$(printf '%s\n' "${loaded_images[@]}" | awk '!seen[$0]++')
+    local pipe_rc=${PIPESTATUS[1]}
+    if [[ $pipe_rc -ne 0 ]]; then
+      echo "Dedup awk failed (exit ${pipe_rc}); 保留原始 loaded_images 繼續執行" >&2
+    else
+      local deduped=()
+      local img
+      while IFS= read -r img; do
+        [[ -n "$img" ]] && deduped+=( "$img" )
+      done <<< "$dedup_out"
+      local before_dedup=${#loaded_images[@]}
+      loaded_images=( "${deduped[@]}" )
+      local after_dedup=${#loaded_images[@]}
+      if [[ $after_dedup -lt $before_dedup ]]; then
+        echo "Deduped $((before_dedup - after_dedup)) duplicate image ref(s)."
+      fi
+    fi
+  fi
 
   if [[ ${#loaded_images[@]} -eq 0 ]]; then
     echo "No images loaded from input tarballs" >&2
@@ -260,42 +341,53 @@ load_all_images() {
   echo "Loaded ${#loaded_images[@]} images total from ${tarball_count} tarball(s)."
 }
 
+# 計算 loaded image 的目標 ref。
+# - image 無 `/`（單段，非 Rancher airgap 常見）→ prepend Target_Registry_Name/Namespace
+# - src_registry + src_namespace 已對齊 Target → 回傳原 image（skip retag）
+# - 其他 → 替換前兩段為 Target_Registry_Name/Namespace
+compute_target_ref() {
+  local image="$1"
+  local src_registry after_reg src_namespace rest
+  src_registry="${image%%/*}"
+  after_reg="${image#*/}"
+  src_namespace="${after_reg%%/*}"
+  rest="${after_reg#*/}"
+
+  if [[ "$src_registry" == "$image" ]]; then
+    # 沒有 registry 前綴（image 只有單段）
+    echo "${Target_Registry_Name}/${Target_Registry_Namespace}/${image}"
+  elif [[ "$src_registry" == "$Target_Registry_Name" && "$src_namespace" == "$Target_Registry_Namespace" ]]; then
+    echo "$image"
+  else
+    echo "${Target_Registry_Name}/${Target_Registry_Namespace}/${rest}"
+  fi
+}
+
 # 對 loaded_images 逐一做 retag（若需要）+ push
+# 將 retag／skip 計數寫到 global retag_count／skip_count 供 summary 使用
 retag_and_push() {
   local total=${#loaded_images[@]}
   local idx=0
-  local image src_registry after_reg src_namespace rest target_ref
+  local image target_ref
+  retag_count=0
+  skip_count=0
 
   for image in "${loaded_images[@]}"; do
     idx=$((idx + 1))
 
-    # 解析 source：<registry>/<namespace>/<rest...>
-    src_registry="${image%%/*}"
-    after_reg="${image#*/}"
-    src_namespace="${after_reg%%/*}"
-    rest="${after_reg#*/}"
+    target_ref=$(compute_target_ref "$image")
 
-    # 若 image 只有單段（沒有 /），after_reg == image；防呆處理
-    if [[ "$src_registry" == "$image" ]]; then
-      # 沒有 registry 前綴（理論上 Rancher airgap 不會出現）；直接拼 target
-      target_ref="${Target_Registry_Name}/${Target_Registry_Namespace}/${image}"
+    # 只有 target_ref 與 image 不同時才真的 tag；相同就 skip
+    if [[ "$target_ref" != "$image" ]]; then
+      retag_count=$((retag_count + 1))
       print_progress "retag" "$idx" "$total" "$image"
       if ! logged_run "import [$idx/$total] retag $image -> $target_ref" "${Container_Runtime}" tag "$image" "$target_ref"; then
         { printf "\n" >/dev/tty; } 2>/dev/null || true
         echo "tag ${image} -> ${target_ref} failed" >&2
         exit 1
       fi
-    elif [[ "$src_registry" == "$Target_Registry_Name" && "$src_namespace" == "$Target_Registry_Namespace" ]]; then
-      # 已對齊，skip retag
-      target_ref="$image"
     else
-      target_ref="${Target_Registry_Name}/${Target_Registry_Namespace}/${rest}"
-      print_progress "retag" "$idx" "$total" "$image"
-      if ! logged_run "import [$idx/$total] retag $image -> $target_ref" "${Container_Runtime}" tag "$image" "$target_ref"; then
-        { printf "\n" >/dev/tty; } 2>/dev/null || true
-        echo "tag ${image} -> ${target_ref} failed" >&2
-        exit 1
-      fi
+      skip_count=$((skip_count + 1))
     fi
 
     print_progress "push" "$idx" "$total" "$target_ref"
@@ -312,6 +404,15 @@ retag_and_push() {
 # ----- main -----
 
 setup_env "$@"
+
+# 使用者若 tail -f log 想知道「跑完了沒／退出碼是什麼」，無論成功或中途
+# exit 1 都要有 END 標記（帶 exit code）可收斂；用 trap 保證這件事。
+# 放在 setup_env 之後：validation 階段的錯誤不需要污染 log 檔。
+# INT/TERM 理論上 EXIT 會在其後自動 fire，但顯式列出意圖更明確。
+trap 'log_section "import END (exit=$?)"' EXIT INT TERM
+
+start_ts=$SECONDS
+
 log_section "import START (Container_Runtime=${Container_Runtime} Target=${Target_Registry_Name}/${Target_Registry_Namespace})"
 
 do_login
@@ -319,6 +420,14 @@ load_all_images "$@"
 retag_and_push
 
 total_images=${#loaded_images[@]}
-echo "Import OK. Loaded ${total_images} images from $# tarball(s)."
-echo "Pushed to: ${Target_Registry_Name}/${Target_Registry_Namespace}"
-log_section "import END"
+elapsed=$((SECONDS - start_ts))
+
+echo ""
+echo "Import OK."
+echo "  Runtime:   ${Container_Runtime}"
+echo "  Target:    ${Target_Registry_Name}/${Target_Registry_Namespace}"
+echo "  Tarballs:  $#"
+echo "  Images:    ${total_images} loaded, ${total_images} pushed (${retag_count} retagged, ${skip_count} already aligned)"
+echo "  Elapsed:   ${elapsed}s"
+echo "  Logs:      ${Command_log_file}"
+echo "             ${Command_Output_log_file}"
