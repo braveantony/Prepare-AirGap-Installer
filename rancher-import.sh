@@ -82,9 +82,11 @@ EOF
 
 [[ "$#" -eq "0" ]] && usage
 
-# 印進度列到終端（同一行覆寫），非 TTY 時靜默
+# 印進度列到終端（同一行覆寫），非 TTY 時靜默。
+# {...} 2>/dev/null 把 bash 對 `/dev/tty` 開啟失敗的錯誤訊息也吞掉，
+# 避免非 TTY 執行環境（CI、被管線吃掉的 subshell）噴錯到 stderr。
 print_progress() {
-  printf "\r\033[K[%s %d/%d] %s" "$1" "$2" "$3" "$4" >/dev/tty 2>/dev/null || true
+  { printf "\r\033[K[%s %d/%d] %s" "$1" "$2" "$3" "$4" >/dev/tty; } 2>/dev/null || true
 }
 
 # 在合併 log 檔寫一個醒目的 section 分隔符
@@ -167,8 +169,17 @@ do_login() {
     return 0
   fi
 
+  # 測密碼存在性的 [[ ]] 在 set -x 下會展開成 `[[ -n <密碼值> ]]` 寫進
+  # Command_log_file；因此**在讀取 Registry_Password 變數前**先關 xtrace，
+  # 只在後段走到互動分支時再打開。
+  set +x
+  local use_stdin=0
   if [[ -n "${Registry_Username}" && -n "${Registry_Password}" ]]; then
-    # 非互動：password-stdin；暫關 xtrace 避免密碼寫進 Command_log_file
+    use_stdin=1
+  fi
+
+  if [[ "$use_stdin" == "1" ]]; then
+    # 非互動：password-stdin
     echo "Login to ${Target_Registry_Name} as ${Registry_Username} (non-interactive)..."
     local login_rc
     local ts_start; ts_start=$(date '+%Y-%m-%d %H:%M:%S')
@@ -178,19 +189,19 @@ do_login() {
       echo "CMD: ${Container_Runtime} login -u ${Registry_Username} --password-stdin ${Target_Registry_Name}"
     } >> "${Command_Output_log_file}"
 
-    set +x
     echo "${Registry_Password}" | "${Container_Runtime}" login -u "${Registry_Username}" --password-stdin "${Target_Registry_Name}" >> "${Command_Output_log_file}" 2>&1
     login_rc=$?
-    set -x
 
     local ts_end; ts_end=$(date '+%Y-%m-%d %H:%M:%S')
     echo "=== [$ts_end] EXIT: $login_rc ===" >> "${Command_Output_log_file}"
+    set -x
 
     if [[ $login_rc -ne 0 ]]; then
       echo "Login to ${Target_Registry_Name} failed" >&2
       exit 1
     fi
   else
+    set -x
     # 互動：直接跑，讓 runtime 自己 prompt（stdin/stderr 不導開）
     echo "Login to ${Target_Registry_Name} (interactive prompt)..."
     if ! "${Container_Runtime}" login "${Target_Registry_Name}"; then
@@ -270,7 +281,7 @@ retag_and_push() {
       target_ref="${Target_Registry_Name}/${Target_Registry_Namespace}/${image}"
       print_progress "retag" "$idx" "$total" "$image"
       if ! logged_run "import [$idx/$total] retag $image -> $target_ref" "${Container_Runtime}" tag "$image" "$target_ref"; then
-        printf "\n" >/dev/tty 2>/dev/null || true
+        { printf "\n" >/dev/tty; } 2>/dev/null || true
         echo "tag ${image} -> ${target_ref} failed" >&2
         exit 1
       fi
@@ -281,7 +292,7 @@ retag_and_push() {
       target_ref="${Target_Registry_Name}/${Target_Registry_Namespace}/${rest}"
       print_progress "retag" "$idx" "$total" "$image"
       if ! logged_run "import [$idx/$total] retag $image -> $target_ref" "${Container_Runtime}" tag "$image" "$target_ref"; then
-        printf "\n" >/dev/tty 2>/dev/null || true
+        { printf "\n" >/dev/tty; } 2>/dev/null || true
         echo "tag ${image} -> ${target_ref} failed" >&2
         exit 1
       fi
@@ -289,13 +300,13 @@ retag_and_push() {
 
     print_progress "push" "$idx" "$total" "$target_ref"
     if ! logged_run "import [$idx/$total] push $target_ref" "${Container_Runtime}" push "$target_ref"; then
-      printf "\n" >/dev/tty 2>/dev/null || true
+      { printf "\n" >/dev/tty; } 2>/dev/null || true
       echo "push ${target_ref} failed" >&2
       exit 1
     fi
   done
 
-  printf "\n" >/dev/tty 2>/dev/null || true
+  { printf "\n" >/dev/tty; } 2>/dev/null || true
 }
 
 # ----- main -----
