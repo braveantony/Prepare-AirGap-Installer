@@ -19,7 +19,7 @@ Usage:
 
 Available options:
 
-all        一次準備 Harbor、RKE2、Rancher 的全離線安裝包
+all        一次準備 Harbor、RKE2、Rancher、K3S、Neuvector 的全離線安裝包
 harbor     只準備 Harbor 的全離線安裝包
 rke2       只準備 RKE2 的全離線安裝包
 rancher    只準備 Rancher 的全離線安裝包
@@ -99,7 +99,7 @@ Environment variables:
      預設是 '/tmp/prepare_output_message.log'。
 
 Example:
-  ## 一次準備 Harbor、RKE2、Rancher 的全離線安裝包，並且指定安裝 Harbor 特定版本
+  ## 一次準備 Harbor、RKE2、Rancher、K3S、Neuvector 的全離線安裝包，並且指定安裝 Harbor 特定版本
   \$ Harbor_Version=v2.7.0 ./podman-prepare.sh all
 
   ## 只準備 Rancher 的全離線安裝包，並且指定安裝 Rancher v2.7.9 版本
@@ -126,7 +126,7 @@ setup_env() {
   fi
 
   # check Command is installed
-  for command in wget curl podman
+  for command in wget curl podman helm
   do
     if ! which $command &> /dev/null; then
       echo "${command} command not found!" && exit 1
@@ -393,9 +393,8 @@ prepare_rancher() {
   # 切換工作目錄
   cd ~/work/rancher/"${Rancher_Version}"
 
-  # 安裝 helm
-  logged_run "rancher: install helm" bash -c 'curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash'
-  [[ "$?" != "0" ]] && echo "Install helm failed" && exit 1
+  # helm 由 setup_env 的 required-command 檢查確保存在；不再 curl|bash 從 helm/main
+  # 分支安裝（floating branch 會破壞「相同 commit → 相同產物」的可重現性）
 
   # 新增並刷新 Rancher Prime 的 Helm Chart Repository
   logged_run "rancher: helm repo add rancher-prime" helm repo add rancher-prime https://charts.rancher.com/server-charts/prime
@@ -437,7 +436,7 @@ prepare_rancher() {
 
     # 下載 cert-manager 的 Container Images
     logged_run "cert-manager [$idx/$cert_manager_total] pull $image" podman pull "$image"
-    [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull quay.io/jetstack/$image Container images failed"; exit 1; }
+    [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull $image failed"; exit 1; }
 
     # 修改 cert-manager 的所有 Container Images Tag
     logged_run "cert-manager [$idx/$cert_manager_total] tag $image" podman tag "${image}" "${Private_Registry_Name}"/"${Private_Registry_Namespace}"/"${image##*/}"
@@ -454,7 +453,7 @@ prepare_rancher() {
 
   # 下載 Helm 壓縮檔
   logged_run "rancher: download helm ${Helm_Version} tarball" wget -q https://get.helm.sh/helm-"${Helm_Version}"-linux-amd64.tar.gz -O helm-"${Helm_Version}"-linux-amd64.tar.gz
-  [[ "$?" != "0" ]] && echo "Download helm ${Helm_Version} failed"
+  [[ "$?" != "0" ]] && echo "Download helm ${Helm_Version} failed" && exit 1
 
   # 下載 Rancher Images List 文字檔及蒐集 Image 所需的 Shell Script
   # -O "${x}"：顯式覆寫同名檔，避免重跑時產生 *.1；舊檔殘留會讓下游 sort -u
@@ -474,12 +473,15 @@ prepare_rancher() {
   # on artifact` 並失敗；filter 掉讓主 pull loop 只處理 container image。
   # 若未來需要一併打包這類 chart artifact，需改用 helm pull oci:// 或 oras pull。
   logged_run "rancher: filter out Helm chart OCI artifacts" sed -i '/^rancher\/charts\//d' rancher-images.txt
+  [[ "$?" != "0" ]] && echo "Filter Helm chart OCI artifacts from rancher-images.txt failed" && exit 1
 
-  [[ "$?" == "0" ]] && echo "Start pulling and saving rancher ${Rancher_Version} images in the background..."
+  echo "Start pulling and saving rancher ${Rancher_Version} images..."
   # 下載離線安裝 Rancher 所需的所有 Container Images 並打包成 rancher-images.tar.gz
   rancher_total=$(wc -l < rancher-images.txt)
   idx=0
-  while read image
+  # `|| [[ -n "$image" ]]`：若檔案最後一行無 trailing newline，read 會回非零但
+  # 仍把該行讀進 $image，補這個判斷才不會漏最後一行
+  while IFS= read -r image || [[ -n "$image" ]]
   do
     idx=$((idx + 1))
     print_progress "rancher" "$idx" "$rancher_total" "$image"
@@ -487,21 +489,19 @@ prepare_rancher() {
       printf "\n" >/dev/tty 2>/dev/null || true
       echo pull "$image" failed && exit 1
     fi
-  done <<< $(cat rancher-images.txt)
+  done < rancher-images.txt
   printf "\n" >/dev/tty 2>/dev/null || true
 
-  rancher_all_image=$(cat rancher-images.txt | sed 's|^|registry.rancher.com/|' | tr '\n' ' ')
-  for n in $rancher_all_image
+  # 主 pull loop 已保證所有 image 都 pull 成功（任一失敗即 exit），此處只負責 retag；
+  # 用 ${image#rancher/} 對齊下方 save 時的 sed 改寫規則（保留多層路徑），避免 single-level
+  # ${n##*/} 與 multi-level sed 對不上導致 podman save 找不到 tag 的 latent bug。
+  while IFS= read -r image || [[ -n "$image" ]]
   do
-    if ! podman images "$n" | grep -q "${n%:*}"; then
-      if ! logged_run "rancher retry pull $n" podman pull registry.rancher.com/"$n"; then
-        echo pull "$n" failed twice && exit 1
-      fi
-    else
-      logged_run "rancher retry tag $n" podman tag "${n}" "${Private_Registry_Name}"/"${Private_Registry_Namespace}"/"${n##*/}"
-      [[ "$?" != "0" ]] && echo "tag ${Private_Registry_Name}/${Private_Registry_Namespace}/${n##*/} Container images failed" && exit 1
-    fi
-  done
+    src="registry.rancher.com/${image}"
+    dst="${Private_Registry_Name}/${Private_Registry_Namespace}/${image#rancher/}"
+    logged_run "rancher tag $image" podman tag "$src" "$dst"
+    [[ "$?" != "0" ]] && echo "tag $dst failed" && exit 1
+  done < rancher-images.txt
 
   # save 為 pipe，用 bash -c + pipefail 包進 logged_run
   # 把 rancher-images.txt 中以 'rancher/' 開頭的項目改寫成 <registry>/<namespace>/；
@@ -561,9 +561,8 @@ prepare_neuvector() {
   # 切換工作目錄
   cd ~/work/neuvector/"${Neuvector_Version}"
 
-  # install helm
-  logged_run "neuvector: install helm" bash -c 'curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash'
-  [[ "$?" != "0" ]] && echo "Install helm failed" && exit 1
+  # helm 由 setup_env 的 required-command 檢查確保存在；不再 curl|bash 從 helm/main
+  # 分支安裝（floating branch 會破壞「相同 commit → 相同產物」的可重現性）
 
   # add repo
   logged_run "neuvector: helm repo add" helm repo add neuvector https://neuvector.github.io/neuvector-helm/
@@ -586,13 +585,13 @@ prepare_neuvector() {
   # get images
   neuvector_total=$(wc -l < images-list.txt)
   idx=0
-  for image in $(cat images-list.txt)
+  while IFS= read -r image || [[ -n "$image" ]]
   do
     idx=$((idx + 1))
     print_progress "neuvector" "$idx" "$neuvector_total" "$image"
     logged_run "neuvector [$idx/$neuvector_total] pull $image" podman pull "$image"
     [[ "$?" != "0" ]] && { printf "\n" >/dev/tty 2>/dev/null; echo "Pull $image failed"; exit 1; }
-  done
+  done < images-list.txt
   printf "\n" >/dev/tty 2>/dev/null || true
 
   # save images to tar.gz（pipe 用 bash -c + pipefail 包）
